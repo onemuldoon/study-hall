@@ -435,8 +435,7 @@ function MiniBar({ value }) {
   );
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-const USERS_KEY = "studyhall-users";
+// ─── Auth (reads/writes Supabase users table directly) ───────────────────────
 
 // Simple deterministic hash — good enough for a school app
 function hashPassword(username, password) {
@@ -448,28 +447,30 @@ function hashPassword(username, password) {
   return h.toString(36);
 }
 
-async function loadUsers() {
-  try { const r = await storage.get(USERS_KEY); return r ? JSON.parse(r.value) : []; } catch { return []; }
-}
-
 async function registerUser(username, password, displayName, isAdmin = false) {
-  const users = await loadUsers();
+  const { supabase } = await import("./lib/supabase.js");
   const uname = username.trim().toLowerCase();
-  if (users.find(u => u.username === uname)) return { ok: false, error: "Username already taken" };
-  const newUser = { username: uname, passwordHash: hashPassword(uname, password), displayName: displayName.trim() || username.trim(), isAdmin, createdAt: new Date().toISOString() };
-  users.push(newUser);
-  await storage.set(USERS_KEY, JSON.stringify(users));
-  return { ok: true, user: newUser };
+  // Check if username taken
+  const { data: existing } = await supabase.from("users").select("username").eq("username", uname).maybeSingle();
+  if (existing) return { ok: false, error: "Username already taken" };
+  const newUser = {
+    username: uname,
+    password_hash: hashPassword(uname, password),
+    display_name: displayName.trim() || username.trim(),
+    is_admin: isAdmin,
+  };
+  const { error } = await supabase.from("users").insert(newUser);
+  if (error) return { ok: false, error: "Could not create account: " + error.message };
+  return { ok: true, user: { username: uname, displayName: newUser.display_name, isAdmin } };
 }
-
 
 async function loginUser(username, password) {
-  const users = await loadUsers();
+  const { supabase } = await import("./lib/supabase.js");
   const uname = username.trim().toLowerCase();
-  const user = users.find(u => u.username === uname);
-  if (!user) return { ok: false, error: "Username not found" };
-  if (user.passwordHash !== hashPassword(uname, password)) return { ok: false, error: "Wrong password" };
-  return { ok: true, user };
+  const { data: user, error } = await supabase.from("users").select("*").eq("username", uname).maybeSingle();
+  if (error || !user) return { ok: false, error: "Username not found" };
+  if (user.password_hash !== hashPassword(uname, password)) return { ok: false, error: "Wrong password" };
+  return { ok: true, user: { username: user.username, displayName: user.display_name, isAdmin: user.is_admin } };
 }
 
 // ─── Storage (user-scoped) ────────────────────────────────────────────────────
