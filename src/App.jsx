@@ -519,7 +519,11 @@ async function loadTopicBank(subjectId, username) {
   catch { return []; }
 }
 async function saveTopicToBank(topic, subjectId, username) {
-  if (!topic?.topicKey || topic.topicKey === "unknown") return;
+  if (!topic?.topicName) return;
+  // Generate a fallback topicKey from the name if missing or unknown
+  if (!topic.topicKey || topic.topicKey === "unknown") {
+    topic = { ...topic, topicKey: topic.topicName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") };
+  }
   try {
     const bank = await loadTopicBank(subjectId, username);
     const existing = bank.findIndex(t => t.topicKey === topic.topicKey);
@@ -927,7 +931,7 @@ export default function App() {
   useEffect(() => () => clearTimer(), []);
 
 
-  // Load subject-specific data when subject changes
+  // Load subject-specific data when subject changes OR when returning to upload screen
   useEffect(() => {
     if (!subject || !currentUser) return;
     loadStats(currentUser.username).then(setHomeStats);
@@ -938,7 +942,7 @@ export default function App() {
       recent.forEach(s => s.log?.forEach(l => { if (!l.ok) missed.add(l.question); }));
       setWeakSpotsCount(missed.size);
     });
-  }, [subject]);
+  }, [subject, screen === "upload" ? "upload" : "other"]);
 
   const prob = problems[idx];
   const isCorrect = submitted && selected === prob?.correct;
@@ -1540,7 +1544,8 @@ ${SCHEMA_INSTRUCTIONS}`;
                         startSession(null, null, hwTopic?._isMix ? hwTopic : null);
                       } else {
                         // Homework topic: save to bank then start
-                        saveTopicToBank(hwTopic, subject?.id, currentUser?.username).then(() => loadTopicBank(subject?.id, currentUser?.username).then(setTopicBank));
+                        // Fire save first, don't await (session starts immediately)
+                        saveTopicToBank(hwTopic, subject?.id, currentUser?.username);
                         startSession(hwFile?.base64 || null, hwFile?.mediaType || null, hwTopic);
                       }
                     }}>
