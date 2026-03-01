@@ -2277,6 +2277,7 @@ export default function App() {
   const [srsMode, setSrsMode] = useState(false);               // currently in SRS review mode
   const [prefetchedProblems, setPrefetchedProblems] = useState([]);
   const [isPrefetching, setIsPrefetching] = useState(false);
+  const [waitingForQuestions, setWaitingForQuestions] = useState(false);
   const prefetchedRef = useRef([]);
   const [bookTitle, setBookTitle] = useState("");             // book title for English
   const [bookChapter, setBookChapter] = useState("");         // chapter or chapter range
@@ -2485,10 +2486,14 @@ export default function App() {
     const isInfinite = TIMER_OPTIONS[timerIdx].infinite && timeLeft > 0;
     if (isInfinite && idx + 1 >= problems.length) {
       if (prefetchedRef.current.length > 0) {
+        // Prefetch ready — append and advance
         setProblems(prev => [...prev, ...prefetchedRef.current]);
         setPrefetchedProblems([]); prefetchedRef.current = [];
+        setIdx((i)=>i+1); setSelected(null); setSubmitted(false);
+      } else {
+        // Prefetch still in flight — wait, don't advance idx
+        setWaitingForQuestions(true);
       }
-      setIdx((i)=>i+1); setSelected(null); setSubmitted(false);
       return;
     }
     if (idx+1>=problems.length) { clearTimer(); setScreen("complete"); return; }
@@ -2506,6 +2511,18 @@ export default function App() {
         .then(newProbs => {
           if (Array.isArray(newProbs) && newProbs.length > 0) {
             setPrefetchedProblems(newProbs); prefetchedRef.current = newProbs;
+            // If student was waiting at the boundary, auto-advance now
+            setWaitingForQuestions(w => {
+              if (w) {
+                setProblems(prev => [...prev, ...newProbs]);
+                prefetchedRef.current = [];
+                setIdx(i => i + 1);
+                setSelected(null);
+                setSubmitted(false);
+                return false;
+              }
+              return w;
+            });
           }
         })
         .catch(() => {})
@@ -4217,6 +4234,17 @@ ${SCHEMA_INSTRUCTIONS}`;
         )}
 
         {/* ── PROBLEM ── */}
+        {waitingForQuestions && (
+          <div style={{ ...S.card, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:300, gap:16 }}>
+            <div style={{ fontSize:32 }}>⏳</div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#1E3A5F" }}>Loading next questions…</div>
+            <div style={{ fontSize:13, color:"#9A9490" }}>Generating your next batch</div>
+            <div style={{ width:200, height:4, background:"#E2DDD8", borderRadius:2, overflow:"hidden" }}>
+              <div style={{ height:"100%", width:"60%", background:"#1E3A5F", borderRadius:2, animation:"shimmer 1.2s ease-in-out infinite" }}/>
+            </div>
+          </div>
+        )}
+
         {screen === "problem" && prob && (
           <div style={S.card}>
             {timeTotal > 0 && (<>
