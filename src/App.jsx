@@ -14,10 +14,10 @@ function topicLabel(t) {
 }
 const TOPICS = ["positive_negative", "graphing", "order_of_operations"];
 const TIMER_OPTIONS = [
-  { label: "3 min", seconds: 180 },
-  { label: "5 min", seconds: 300 },
-  { label: "10 min", seconds: 600 },
-  { label: "Untimed", seconds: 0 },
+  { label: "3 min",   seconds: 180, questionCount: 8,  infinite: false },
+  { label: "5 min",   seconds: 300, questionCount: 8,  infinite: true  },
+  { label: "10 min",  seconds: 600, questionCount: 8,  infinite: true  },
+  { label: "Untimed", seconds: 0,   questionCount: 15, infinite: false },
 ];
 // ─── Subject Config ──────────────────────────────────────────────────────────
 const SUBJECTS = [
@@ -703,8 +703,9 @@ topicKey: short snake_case identifier. topicName: 2-4 word friendly name. descri
   return JSON.parse(match[0]);
 }
 
-async function generateProblems(base64, mediaType, difficulty, hwTopic, subject) {
+async function generateProblems(base64, mediaType, difficulty, hwTopic, subject, questionCount = 8) {
   const blocks = [];
+  const qCount = questionCount;
 
   if (base64 && mediaType) {
     // ── HOMEWORK MODE: difficulty is relative to the homework baseline ────
@@ -1041,6 +1042,9 @@ export default function App() {
   const [textTopicInput, setTextTopicInput] = useState("");   // theme text input
   const [srsCards, setSrsCards] = useState([]);                // all SRS cards for user
   const [srsMode, setSrsMode] = useState(false);               // currently in SRS review mode
+  const [prefetchedProblems, setPrefetchedProblems] = useState([]);
+  const [isPrefetching, setIsPrefetching] = useState(false);
+  const prefetchedRef = useRef([]);
   const [bookTitle, setBookTitle] = useState("");             // book title for English
   const [bookChapter, setBookChapter] = useState("");         // chapter or chapter range
   const [bookAuthor, setBookAuthor] = useState("");           // book author for English
@@ -1074,6 +1078,7 @@ export default function App() {
 
   const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
   useEffect(() => () => clearTimer(), []);
+  useEffect(() => { prefetchedRef.current = prefetchedProblems; }, [prefetchedProblems]);
 
 
   // Load subject-specific data when subject changes OR when returning to upload screen
