@@ -3,6 +3,20 @@ import { storage } from "./lib/supabase.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DIFFICULTY_LABELS = ["Starter", "Building", "Challenging"];
+const DIFFICULTY_WEIGHTS = [1.0, 1.5, 2.2]; // mastery score multipliers per level
+const DIFFICULTY_COLORS = ["#60a5fa", "#f0a050", "#c084fc"];
+function masteryScore(correct, total, difficulty) {
+  if (!total) return 0;
+  const w = DIFFICULTY_WEIGHTS[difficulty] || 1.0;
+  return Math.round((correct / total) * 100 * w);
+}
+function masteryLabel(score) {
+  if (score >= 180) return "Elite";
+  if (score >= 140) return "Advanced";
+  if (score >= 110) return "Proficient";
+  if (score >= 80)  return "Developing";
+  return "Building";
+}
 const TOPIC_COLOR_MAP = { positive_negative: "#60a5fa", graphing: "#c084fc", order_of_operations: "#34d399" };
 const TOPIC_LABEL_MAP = { positive_negative: "Pos / Neg", graphing: "Graphing", order_of_operations: "Order of Ops" };
 // Gracefully handle any topic string (e.g. "fractions", "equivalent_fractions")
@@ -570,12 +584,47 @@ function buildDashboardData(allSessions, srsCards, stats, username, displayName)
 
     sessions.forEach(s => allSessionsFlat.push({ ...s, subjectId: sub.id, subjectName: sub.name }));
 
+    // Mastery score history (weighted by difficulty)
+    const masteryHistory = sessions.slice(0, 10).map(s =>
+      s.masteryScore || masteryScore(s.correct, s.total, s.difficulty || 0)
+    );
+    const avgMastery = masteryHistory.length
+      ? Math.round(masteryHistory.reduce((a,b)=>a+b,0) / masteryHistory.length)
+      : 0;
+    const recentMastery = masteryHistory[0] || 0;
+    const firstMastery = masteryHistory.length > 0
+      ? (sessions[sessions.length-1].masteryScore || masteryScore(sessions[sessions.length-1].correct, sessions[sessions.length-1].total, sessions[sessions.length-1].difficulty || 0))
+      : 0;
+    const masteryDelta = firstMastery > 0 ? recentMastery - firstMastery : null;
+
+    // Difficulty progression: how many sessions at each level
+    const diffCounts = [0,0,0];
+    sessions.forEach(s => { diffCounts[s.difficulty||0]++; });
+    const diffProgression = { starter: diffCounts[0], building: diffCounts[1], challenging: diffCounts[2] };
+
+    // Sessions at highest difficulty (Challenging)
+    const challengingSessions = sessions.filter(s => (s.difficulty||0) === 2);
+    const challengingAvgAccuracy = challengingSessions.length
+      ? Math.round(challengingSessions.reduce((a,s)=>a+(s.correct/s.total*100),0)/challengingSessions.length)
+      : null;
+
+    // Is difficulty trending up? last 3 sessions avg difficulty vs prior 3
+    const recentDiffAvg = sessions.slice(0,3).reduce((a,s)=>a+(s.difficulty||0),0)/Math.min(3,sessions.length);
+    const olderDiffAvg = sessions.slice(3,6).length
+      ? sessions.slice(3,6).reduce((a,s)=>a+(s.difficulty||0),0)/sessions.slice(3,6).length
+      : recentDiffAvg;
+    const diffTrend = recentDiffAvg > olderDiffAvg + 0.3 ? "leveling-up"
+                    : recentDiffAvg < olderDiffAvg - 0.3 ? "dropping-back"
+                    : "holding-steady";
+
     subjectSummaries[sub.id] = {
       sessions: sessions.length, avgScore, trend, recentScores,
       weakTopics, strongTopics, topicStats,
       totalQuestions: subTotal, totalCorrect: subCorrect,
       firstScore, recentScore, improvementDelta,
-      difficultyHistory, avgDifficulty,
+      difficultyHistory, avgDifficulty, diffProgression, diffTrend,
+      challengingSessions: challengingSessions.length, challengingAvgAccuracy,
+      masteryHistory, avgMastery, recentMastery, firstMastery, masteryDelta,
       persistentErrors, totalTimeSeconds,
       accent: sub.accent, bg: sub.bg, border: sub.border, emoji: sub.emoji, name: sub.name
     };
@@ -618,10 +667,18 @@ function buildDashboardData(allSessions, srsCards, stats, username, displayName)
     return daysPast > 3;
   }).length;
 
+  // Overall avg mastery across all subjects
+  const allMasteryScores = Object.values(subjectSummaries)
+    .filter(s => s.masteryHistory?.length > 0)
+    .flatMap(s => s.masteryHistory);
+  const avgMasteryOverall = allMasteryScores.length
+    ? Math.round(allMasteryScores.reduce((a,b)=>a+b,0)/allMasteryScores.length)
+    : 0;
+
   return {
     username, displayName,
     totalSessions, totalQuestions, totalCorrect,
-    totalTimeSeconds,
+    totalTimeSeconds, avgMasteryOverall,
     avgScore: totalQuestions > 0 ? Math.round((totalCorrect/totalQuestions)*100) : 0,
     currentStreak: stats?.currentStreak || 0,
     bestStreak: stats?.bestStreak || 0,
@@ -653,16 +710,20 @@ async function generateStudentInsightReport(dashData) {
       ? d.persistentErrors.map(e => `"${e.question}" missed ${e.times}x`).join("; ")
       : "none";
     const diffLabel = ["Starter","Building","Challenging"][Math.round(d.avgDifficulty)] || "Building";
+      const masteryDeltaStr = d.masteryDelta !== null ? (d.masteryDelta >= 0 ? `+${d.masteryDelta}` : `${d.masteryDelta}`) : "N/A";
+      const diffDist = `Starter: ${d.diffProgression?.starter||0}, Building: ${d.diffProgression?.building||0}, Challenging: ${d.diffProgression?.challenging||0}`;
     return [
       `SUBJECT: ${s.name}`,
-      `  Sessions: ${d.sessions} | Questions: ${d.totalQuestions} | Accuracy: ${d.avgScore}% | Time invested: ${fmtMins(d.totalTimeSeconds)}`,
-      `  First session score: ${fmt(d.firstScore)}% → Most recent: ${fmt(d.recentScore)}% (change: ${delta})`,
-      `  Trend (last 3 vs prior 3 sessions): ${d.trend}`,
-      `  Average difficulty level reached: ${diffLabel}`,
+      `  Sessions: ${d.sessions} | Questions: ${d.totalQuestions} | Accuracy: ${d.avgScore}% | Time: ${fmtMins(d.totalTimeSeconds)}`,
+      `  First session: raw ${fmt(d.firstScore)}%, mastery ${fmt(d.firstMastery)} → Recent: raw ${fmt(d.recentScore)}%, mastery ${fmt(d.recentMastery)} (mastery change: ${masteryDeltaStr})`,
+      `  Raw accuracy trend: ${d.trend} | Difficulty trend: ${d.diffTrend}`,
+      `  Session difficulty distribution: ${diffDist}`,
+      `  Avg difficulty: ${diffLabel} | Challenging sessions: ${d.challengingSessions||0}${d.challengingAvgAccuracy ? ` at ${d.challengingAvgAccuracy}% accuracy` : ""}`,
+      `  Avg mastery score: ${d.avgMastery} (${masteryLabel(d.avgMastery)}) — max possible at Challenging = 220`,
       `  Strong topics: ${strongList}`,
       `  Weak topics: ${weakList}`,
       `  Persistent errors (wrong 2+ times): ${persErrors}`,
-      `  Score history (recent→oldest): ${d.recentScores.slice(0,6).map(s=>s+"%").join(", ")}`,
+      `  Mastery history (recent→oldest): ${(d.masteryHistory||[]).slice(0,6).join(", ")}`,
     ].join("\n");
   }).join("\n\n");
 
@@ -695,6 +756,8 @@ async function generateStudentInsightReport(dashData) {
     `  Total study time: ${totalMins} minutes across ${dashData.totalSessions} sessions`,
     `  Active days in last 14 days: ${Math.round(dashData.consistencyScore/100*14)} of 14 (${dashData.consistencyScore}% consistency)`,
     `  Current streak: ${dashData.currentStreak} days | Best streak: ${dashData.bestStreak} days`,
+    `  Overall avg mastery score: ${dashData.avgMasteryOverall} (${masteryLabel(dashData.avgMasteryOverall)})`,
+    `  Overall raw accuracy: ${dashData.avgScore}%`,
     `  Weekly sessions (oldest→newest): ${dashData.weeklyActivity.join(", ")}`,
     `  Engagement trend (recent 3 weeks vs prior 3): ${engagementTrend}`,
     `  Peak week: ${weeklyMax} sessions`,
@@ -717,8 +780,14 @@ SCIENTIFIC FRAMEWORKS TO APPLY (use whichever are supported by the data):
 - Interleaving Effect: if Mix sessions exist, compare performance to single-topic sessions
 - Automaticity and Fluency: persistent errors on the same question indicate the concept has not reached automaticity
 
+KEY CONTEXT — Mastery Score system:
+Mastery Score = accuracy% × difficulty multiplier (Starter×1.0, Building×1.5, Challenging×2.2). Max at Challenging = 220.
+A mastery score rising while raw accuracy stays flat = POSITIVE (student is tackling harder material).
+"leveling-up" difficulty trend = productive challenge zone (Bjork's desirable difficulties in action).
+"dropping-back" = may indicate frustration or avoidance — worth flagging diplomatically.
+
 STRICT WRITING RULES — violations will make this report useless:
-1. Every observation MUST cite a specific number from the data above. No sentence like "is improving" without saying "improved from X% to Y%"
+1. Every observation MUST cite a specific number. Never say "is improving" without "mastery improved from X to Y"
 2. Name specific subjects and topics — never say "some subjects" or "certain areas"
 3. Persistent errors must be named explicitly if present
 4. SRS data must be interpreted through the Ebbinghaus lens
@@ -1544,7 +1613,9 @@ export default function App() {
       // Ingest session questions into SRS system
       ingestSessionToSrs(log, subject?.id||"math", hwTopic?.topicKey||"general", currentUser?.username)
         .then(() => loadSrsCards(currentUser?.username).then(setSrsCards));
-      saveSession({ id:Date.now().toString(), date:new Date().toISOString(), subject:subject?.id||"math", subjectName:subject?.name||"Math", timeSpent:timeTotal>0?Math.min(timeUsed,timeTotal):timeUsed, timed:timeTotal>0, difficulty, total:log.length, correct:log.filter((l)=>l.ok).length, log:log.map(({topic,ok,question,selected,correct})=>({topic,ok,question,selected,correct})) }, subject?.id, currentUser?.username);
+      const sessionCorrect = log.filter((l)=>l.ok).length;
+      const sessionMastery = masteryScore(sessionCorrect, log.length, difficulty);
+      saveSession({ id:Date.now().toString(), date:new Date().toISOString(), subject:subject?.id||"math", subjectName:subject?.name||"Math", timeSpent:timeTotal>0?Math.min(timeUsed,timeTotal):timeUsed, timed:timeTotal>0, difficulty, total:log.length, correct:sessionCorrect, masteryScore:sessionMastery, log:log.map(({topic,ok,question,selected,correct})=>({topic,ok,question,selected,correct})) }, subject?.id, currentUser?.username);
       updateStats(sessionPct, currentUser?.username).then(stats => {
         setHomeStats(stats);
         // Refresh weak spots count
@@ -2456,19 +2527,43 @@ ${SCHEMA_INSTRUCTIONS}`;
                 {dashboardTab === "overview" && (<>
 
                   {/* Stat row */}
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:24 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10, marginBottom:16 }}>
                     {[
-                      { label:"Sessions", value: d.totalSessions, sub: "total" },
-                      { label:"Questions", value: d.totalQuestions, sub: "answered" },
-                      { label:"Accuracy", value: d.avgScore + "%", sub: "overall", color: d.avgScore >= 70 ? POS_COLOR : d.avgScore >= 50 ? "#D97706" : NEG_COLOR },
-                      { label:"Streak", value: d.currentStreak, sub: d.currentStreak > 0 ? "days 🔥" : "days" },
+                      { label:"Sessions", value: d.totalSessions, sub: "total", color:"#1E3A5F" },
+                      { label:"Streak", value: d.currentStreak, sub: d.currentStreak > 0 ? "days 🔥" : "days", color: d.currentStreak >= 3 ? POS_COLOR : "#1E3A5F" },
                     ].map(({ label, value, sub, color }) => (
                       <div key={label} style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"14px 12px", textAlign:"center" }}>
-                        <div style={{ fontSize:22, fontWeight:800, color: color || "#1E3A5F", fontFamily:"monospace" }}>{value}</div>
+                        <div style={{ fontSize:22, fontWeight:800, color, fontFamily:"monospace" }}>{value}</div>
                         <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginTop:3 }}>{label}</div>
                         <div style={{ fontSize:10, color:"#C0BCB8" }}>{sub}</div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Mastery vs Raw Accuracy comparison card */}
+                  <div style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:12, padding:"16px 18px", marginBottom:16 }}>
+                    <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:12, fontWeight:700 }}>Score vs Mastery</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr", gap:8, alignItems:"center" }}>
+                      <div style={{ textAlign:"center" }}>
+                        <div style={{ fontSize:11, color:"#9A9490", marginBottom:4 }}>Raw Accuracy</div>
+                        <div style={{ fontSize:28, fontWeight:800, fontFamily:"monospace", color: d.avgScore >= 70 ? POS_COLOR : d.avgScore >= 50 ? "#D97706" : NEG_COLOR }}>{d.avgScore}%</div>
+                        <div style={{ fontSize:10, color:"#C0BCB8" }}>{d.totalCorrect}/{d.totalQuestions} correct</div>
+                      </div>
+                      <div style={{ textAlign:"center", color:"#C0BCB8", fontSize:18 }}>→</div>
+                      <div style={{ textAlign:"center", background:"#1E3A5F08", borderRadius:10, padding:"10px 8px" }}>
+                        <div style={{ fontSize:11, color:"#1E3A5F", marginBottom:4, fontWeight:700 }}>Mastery Score</div>
+                        <div style={{ fontSize:28, fontWeight:800, fontFamily:"monospace", color:"#1E3A5F" }}>{d.avgMasteryOverall}</div>
+                        <div style={{ fontSize:10, color:"#9A9490" }}>{masteryLabel(d.avgMasteryOverall)}</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop:12, background:"#E2DDD8", borderRadius:3, height:4, overflow:"hidden", position:"relative" }}>
+                      <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${Math.min(d.avgScore,100)}%`, background: d.avgScore >= 70 ? POS_COLOR : "#D97706", borderRadius:3, opacity:0.4 }}/>
+                      <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${Math.min(d.avgMasteryOverall/2.2,100)}%`, background:"#1E3A5F", borderRadius:3 }}/>
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
+                      <div style={{ fontSize:9, color:"#C0BCB8" }}>■ Mastery (difficulty-weighted)</div>
+                      <div style={{ fontSize:9, color:"#C0BCB8", opacity:0.5 }}>■ Raw accuracy</div>
+                    </div>
                   </div>
 
                   {/* Weekly activity bar chart */}
@@ -2539,9 +2634,25 @@ ${SCHEMA_INSTRUCTIONS}`;
                               <div style={{ fontSize:11, color:sub.accentDim }}>{s.sessions} session{s.sessions!==1?"s":""}</div>
                               <div style={{ fontSize:16, fontWeight:800, color:scoreColor, fontFamily:"monospace" }}>{s.avgScore}%</div>
                             </div>
-                            {/* Score bar */}
-                            <div style={{ background:sub.border, borderRadius:3, height:4, marginTop:6, overflow:"hidden" }}>
-                              <div style={{ height:"100%", width:`${s.avgScore}%`, background:scoreColor, borderRadius:3, transition:"width .5s ease" }} />
+                            {/* Difficulty distribution pills */}
+                            <div style={{ display:"flex", gap:3, marginTop:6, marginBottom:4 }}>
+                              {[["S", s.diffProgression?.starter||0, "#60a5fa"], ["B", s.diffProgression?.building||0, "#f0a050"], ["C", s.diffProgression?.challenging||0, "#c084fc"]].map(([lbl,cnt,clr]) =>
+                                cnt > 0 ? (
+                                  <span key={lbl} style={{ fontSize:9, background:clr+"22", border:`1px solid ${clr}44`, borderRadius:4, padding:"1px 5px", color:clr, fontWeight:800 }}>
+                                    {lbl}{cnt}
+                                  </span>
+                                ) : null
+                              )}
+                              {s.diffTrend === "leveling-up" && <span style={{ fontSize:9, color:POS_COLOR, fontWeight:800, marginLeft:2 }}>↑ leveling up</span>}
+                            </div>
+                            {/* Dual bar: mastery vs raw */}
+                            <div style={{ position:"relative", background:sub.border, borderRadius:3, height:5, overflow:"hidden" }}>
+                              <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${Math.min(s.avgScore,100)}%`, background:scoreColor, opacity:0.35, borderRadius:3 }}/>
+                              <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${Math.min((s.avgMastery||s.avgScore)/2.2,100)}%`, background:sub.accent, borderRadius:3, transition:"width .5s ease" }}/>
+                            </div>
+                            <div style={{ display:"flex", justifyContent:"space-between", marginTop:3 }}>
+                              <div style={{ fontSize:9, color:sub.accentDim }}>mastery: {s.avgMastery||"–"}</div>
+                              <div style={{ fontSize:9, color:sub.accentDim, opacity:0.6 }}>{s.avgScore}% raw</div>
                             </div>
                           </div>
                         );
@@ -2635,41 +2746,99 @@ ${SCHEMA_INSTRUCTIONS}`;
                             <span style={{ fontSize:20 }}>{sub.emoji}</span>
                             <div>
                               <div style={{ fontSize:16, fontWeight:800, color:sub.accent }}>{sub.name}</div>
-                              <div style={{ fontSize:10, color:sub.accentDim }}>{s.sessions} sessions · {s.totalQuestions} questions</div>
+                              <div style={{ fontSize:10, color:sub.accentDim }}>{s.sessions} sessions · {s.totalQuestions} questions · {Math.round((s.totalTimeSeconds||0)/60)} min</div>
                             </div>
                           </div>
                           <div style={{ textAlign:"right" }}>
-                            <div style={{ fontSize:24, fontWeight:800, color:scoreColor, fontFamily:"monospace" }}>{s.avgScore}%</div>
-                            <div style={{ fontSize:10, color:s.trend==="improving"?POS_COLOR:s.trend==="declining"?NEG_COLOR:"#9A9490", fontWeight:700 }}>
-                              {s.trend==="improving"?"↑ Improving":s.trend==="declining"?"↓ Declining":"→ Steady"}
-                            </div>
+                            <div style={{ fontSize:11, color:"#9A9490", marginBottom:2 }}>Raw: {s.avgScore}%</div>
+                            <div style={{ fontSize:24, fontWeight:800, color:sub.accent, fontFamily:"monospace" }}>{s.avgMastery||s.avgScore}</div>
+                            <div style={{ fontSize:10, color:"#9A9490" }}>mastery · {masteryLabel(s.avgMastery||s.avgScore)}</div>
                           </div>
                         </div>
-                        {/* Score history chart */}
+
+                        {/* Difficulty breakdown bar */}
+                        {s.diffProgression && (
+                          <div style={{ marginBottom:14 }}>
+                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>
+                              Difficulty Reached
+                              {s.diffTrend === "leveling-up" && <span style={{ color:POS_COLOR, marginLeft:8 }}>↑ Leveling Up</span>}
+                              {s.diffTrend === "dropping-back" && <span style={{ color:NEG_COLOR, marginLeft:8 }}>↓ Dropping Back</span>}
+                            </div>
+                            <div style={{ display:"flex", borderRadius:6, overflow:"hidden", height:20 }}>
+                              {[
+                                { label:"Starter", count:s.diffProgression.starter, color:"#60a5fa" },
+                                { label:"Building", count:s.diffProgression.building, color:"#f0a050" },
+                                { label:"Challenging", count:s.diffProgression.challenging, color:"#c084fc" },
+                              ].filter(d => d.count > 0).map(d => (
+                                <div key={d.label} style={{ flex:d.count, background:d.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, color:"#fff", fontWeight:800, gap:2, minWidth:d.count > 0 ? 24 : 0 }}>
+                                  {d.count > 1 && d.label[0]}{d.count}
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                              {[["Starter","#60a5fa"],["Building","#f0a050"],["Challenging","#c084fc"]].map(([lbl,clr]) => (
+                                <span key={lbl} style={{ fontSize:9, color:clr, fontWeight:700 }}>■ {lbl}</span>
+                              ))}
+                              {s.challengingSessions > 0 && (
+                                <span style={{ fontSize:9, color:"#c084fc", marginLeft:"auto" }}>
+                                  Challenging avg: {s.challengingAvgAccuracy}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {/* Score + mastery history chart */}
                         {s.recentScores.length > 1 && (() => {
-                          const pts = s.recentScores.slice().reverse();
-                          const w=300, h=60, padL=28, padB=16;
-                          const xs = pts.map((_,i) => padL + Math.round((i/(pts.length-1))*(w-padL)));
-                          const ys = pts.map(v => Math.round(h - padB - ((v/100)*(h-padB-4))));
-                          const path = pts.map((v,i) => `${i===0?"M":"L"}${xs[i]},${ys[i]}`).join(" ");
-                          const areaPath = `${path} L${xs[xs.length-1]},${h-padB} L${xs[0]},${h-padB} Z`;
+                          const rawPts = s.recentScores.slice().reverse();
+                          const masteryPts = (s.masteryHistory||[]).slice().reverse();
+                          const w=300, h=72, padL=28, padB=16;
+                          const maxVal = Math.max(...masteryPts, 110);
+                          const toY = v => Math.round(h - padB - ((v/maxVal)*(h-padB-4)));
+                          const rawXs = rawPts.map((_,i) => padL + Math.round((i/(rawPts.length-1))*(w-padL)));
+                          const rawYs = rawPts.map(v => toY(v));
+                          const rawPath = rawPts.map((v,i) => `${i===0?"M":"L"}${rawXs[i]},${rawYs[i]}`).join(" ");
+                          const masteryXs = masteryPts.map((_,i) => padL + Math.round((i/(Math.max(masteryPts.length-1,1)))*(w-padL)));
+                          const masteryYs = masteryPts.map(v => toY(v));
+                          const masteryPath = masteryPts.length > 1 ? masteryPts.map((v,i) => `${i===0?"M":"L"}${masteryXs[i]},${masteryYs[i]}`).join(" ") : "";
+                          const areaPath = `${rawPath} L${rawXs[rawXs.length-1]},${h-padB} L${rawXs[0]},${h-padB} Z`;
+                          const diffColors = ["#60a5fa","#f0a050","#c084fc"];
+                          // Get difficulty per session (reversed to oldest-first for chart)
+                          const diffHistory = (s.difficultyHistory||[]).slice().reverse();
                           return (
                             <div style={{ background:sub.bg, borderRadius:8, padding:"10px 8px 4px", marginBottom:12 }}>
+                              <div style={{ display:"flex", gap:12, marginBottom:6 }}>
+                                <span style={{ fontSize:9, color:sub.accent, fontWeight:700 }}>── Raw accuracy</span>
+                                <span style={{ fontSize:9, color:"#1E3A5F", fontWeight:700 }}>── Mastery score</span>
+                                <span style={{ fontSize:9, color:"#9A9490" }}>(dots = difficulty)</span>
+                              </div>
                               <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display:"block", overflow:"visible" }}>
-                                {/* Y-axis guides */}
-                                {[0,50,70,100].map(v => {
-                                  const y = Math.round(h - padB - ((v/100)*(h-padB-4)));
-                                  return <g key={v}><line x1={padL} y1={y} x2={w} y2={y} stroke={sub.border} strokeWidth="1" strokeDasharray="3,3"/><text x={padL-4} y={y+4} textAnchor="end" fill={sub.accentDim} fontSize="8">{v}</text></g>;
+                                {[0,70,100,150].map(v => {
+                                  if (v > maxVal + 10) return null;
+                                  const y = toY(v);
+                                  return <g key={v}><line x1={padL} y1={y} x2={w} y2={y} stroke={sub.border} strokeWidth="1" strokeDasharray={v===100?"4,2":"3,3"} opacity={v===100?0.7:0.4}/><text x={padL-4} y={y+4} textAnchor="end" fill={sub.accentDim} fontSize="8">{v}</text></g>;
                                 })}
-                                {/* Area fill */}
-                                <path d={areaPath} fill={sub.accent} opacity="0.08" />
-                                {/* Line */}
-                                <path d={path} stroke={sub.accent} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                                {/* Dots */}
-                                {pts.map((v,i) => <circle key={i} cx={xs[i]} cy={ys[i]} r="4" fill={sub.accent} stroke="#fff" strokeWidth="1.5" />)}
+                                {/* 100 label annotation */}
+                                {maxVal > 110 && <text x={w-2} y={toY(100)+4} textAnchor="end" fill={sub.accentDim} fontSize="8" opacity="0.6">100</text>}
+                                {/* Raw area fill */}
+                                <path d={areaPath} fill={sub.accent} opacity="0.07" />
+                                {/* Raw line */}
+                                <path d={rawPath} stroke={sub.accent} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
+                                {/* Mastery line */}
+                                {masteryPath && <path d={masteryPath} stroke="#1E3A5F" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+                                {/* Dots colored by difficulty */}
+                                {masteryPts.map((v,i) => {
+                                  const diff = diffHistory[i] || 0;
+                                  const clr = diffColors[diff];
+                                  return <circle key={i} cx={masteryXs[i]} cy={masteryYs[i]} r="5" fill={clr} stroke="#fff" strokeWidth="1.5" />;
+                                })}
                               </svg>
-                              <div style={{ display:"flex", justifyContent:"space-between", padding:"0 8px" }}>
+                              <div style={{ display:"flex", justifyContent:"space-between", padding:"0 8px", marginTop:2 }}>
                                 <div style={{ fontSize:9, color:sub.accentDim }}>← Oldest</div>
+                                <div style={{ display:"flex", gap:8 }}>
+                                  {[["S","#60a5fa"],["B","#f0a050"],["C","#c084fc"]].map(([l,c])=>(
+                                    <span key={l} style={{ fontSize:9, color:c, fontWeight:800 }}>● {l}</span>
+                                  ))}
+                                </div>
                                 <div style={{ fontSize:9, color:sub.accentDim }}>Most Recent →</div>
                               </div>
                             </div>
@@ -2958,11 +3127,36 @@ ${SCHEMA_INSTRUCTIONS}`;
           <div style={S.card}>
             <div style={S.logo}>Session Complete</div>
             <div style={S.h1}>RESULTS</div>
+            {/* Raw score */}
             <div style={S.bigScore}>{score}</div>
             <div style={S.bigDenom}>out of {log.length}</div>
             {timeTotal>0
               ? <div style={S.timeStat}>⏱ {fmt(Math.min(timeUsed,timeTotal))} of {fmt(timeTotal)}</div>
               : timeUsed>0 ? <div style={S.timeStat}>⏱ {fmt(timeUsed)} elapsed</div> : null}
+
+            {/* Mastery score panel */}
+            {(() => {
+              const ms = masteryScore(score, log.length, difficulty);
+              const w = DIFFICULTY_WEIGHTS[difficulty];
+              const mLabel = masteryLabel(ms);
+              const diffColor = DIFFICULTY_COLORS[difficulty];
+              return (
+                <div style={{ background:"#F8F6F3", border:`1.5px solid ${diffColor}44`, borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                  <div>
+                    <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:3, fontWeight:700 }}>Mastery Score</div>
+                    <div style={{ fontSize:32, fontWeight:800, color:diffColor, fontFamily:"monospace", lineHeight:1 }}>{ms}</div>
+                    <div style={{ fontSize:11, color:"#9A9490", marginTop:3 }}>= {Math.round(score/log.length*100)}% × {w}× difficulty_weight</div>
+                  </div>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ background:diffColor+"18", border:`1px solid ${diffColor}44`, borderRadius:8, padding:"6px 12px", marginBottom:6 }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:diffColor }}>{DIFFICULTY_LABELS[difficulty]}</div>
+                      <div style={{ fontSize:9, color:diffColor+"99", letterSpacing:1 }}>DIFFICULTY</div>
+                    </div>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#9A9490" }}>{mLabel}</div>
+                  </div>
+                </div>
+              );
+            })()}
             {[...new Set(log.map(l=>l.topic))].map((topic) => {
               const rows = log.filter((l)=>l.topic===topic);
               const ok = rows.filter((r)=>r.ok).length;
