@@ -510,101 +510,243 @@ function buildDashboardData(allSessions, srsCards, stats, username, displayName)
   SUBJECTS.forEach(sub => {
     const sessions = allSessions[sub.id] || [];
     if (!sessions.length) {
-      subjectSummaries[sub.id] = { sessions: 0, avgScore: 0, trend: "no-data", recentScores: [], weakTopics: [], totalQuestions: 0 };
+      subjectSummaries[sub.id] = { sessions: 0, avgScore: 0, trend: "no-data", recentScores: [], weakTopics: [], strongTopics: [], totalQuestions: 0, firstScore: null, recentScore: null, improvementDelta: null, difficultyHistory: [], persistentErrors: [] };
       return;
     }
     totalSessions += sessions.length;
+    const chronological = [...sessions].reverse(); // oldest first
     const recentScores = sessions.slice(0, 10).map(s => Math.round((s.correct / s.total) * 100));
     const avgScore = Math.round(recentScores.reduce((a,b)=>a+b,0) / recentScores.length);
-    
+
     // Trend: compare last 3 vs previous 3
     const r3 = recentScores.slice(0,3), p3 = recentScores.slice(3,6);
     const rAvg = r3.reduce((a,b)=>a+b,0)/r3.length;
     const pAvg = p3.length ? p3.reduce((a,b)=>a+b,0)/p3.length : rAvg;
     const trend = rAvg - pAvg >= 8 ? "improving" : pAvg - rAvg >= 8 ? "declining" : "steady";
 
-    // Weak topics from recent sessions
-    const topicErrors = {};
-    sessions.slice(0,8).forEach(s => s.log?.forEach(l => {
-      if (!l.ok) topicErrors[l.topic] = (topicErrors[l.topic]||0) + 1;
+    // First vs recent score (improvement magnitude)
+    const firstScore = chronological.length > 0 ? Math.round((chronological[0].correct/chronological[0].total)*100) : null;
+    const recentScore = recentScores[0] || null;
+    const improvementDelta = (firstScore !== null && recentScore !== null) ? recentScore - firstScore : null;
+
+    // Per-topic accuracy (attempts + correct) across all sessions
+    const topicStats = {};
+    sessions.forEach(s => s.log?.forEach(l => {
+      if (!topicStats[l.topic]) topicStats[l.topic] = { attempts: 0, correct: 0, errors: [] };
+      topicStats[l.topic].attempts++;
+      if (l.ok) topicStats[l.topic].correct++;
+      else topicStats[l.topic].errors.push(l.question);
     }));
-    const weakTopics = Object.entries(topicErrors).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t,n])=>({topic:t,count:n}));
+
+    // Persistent errors: questions wrong in multiple sessions
+    const errorCounts = {};
+    sessions.slice(0,10).forEach(s => s.log?.forEach(l => {
+      if (!l.ok) errorCounts[l.question] = (errorCounts[l.question]||0) + 1;
+    }));
+    const persistentErrors = Object.entries(errorCounts)
+      .filter(([,n]) => n >= 2)
+      .sort((a,b) => b[1]-a[1])
+      .slice(0,3)
+      .map(([q,n]) => ({ question: q.slice(0,60), times: n }));
+
+    // Weak and strong topics by accuracy rate
+    const topicAccuracy = Object.entries(topicStats)
+      .filter(([,v]) => v.attempts >= 3)
+      .map(([t,v]) => ({ topic: t, accuracy: Math.round((v.correct/v.attempts)*100), attempts: v.attempts }));
+    const weakTopics = topicAccuracy.filter(t => t.accuracy < 70).sort((a,b) => a.accuracy-b.accuracy).slice(0,3);
+    const strongTopics = topicAccuracy.filter(t => t.accuracy >= 80).sort((a,b) => b.accuracy-a.accuracy).slice(0,3);
+
+    // Difficulty history: avg difficulty per recent session
+    const difficultyHistory = sessions.slice(0,8).map(s => s.difficulty || 0).reverse();
+    const avgDifficulty = difficultyHistory.length ? Math.round(difficultyHistory.reduce((a,b)=>a+b,0)/difficultyHistory.length*10)/10 : 0;
+
+    // Time invested
+    const totalTimeSeconds = sessions.reduce((a,s) => a + (s.timeSpent||0), 0);
 
     const subTotal = sessions.reduce((a,s)=>a+s.total,0);
     const subCorrect = sessions.reduce((a,s)=>a+s.correct,0);
     totalQuestions += subTotal;
     totalCorrect += subCorrect;
-    
+
     sessions.forEach(s => allSessionsFlat.push({ ...s, subjectId: sub.id, subjectName: sub.name }));
-    
-    subjectSummaries[sub.id] = { sessions: sessions.length, avgScore, trend, recentScores, weakTopics, totalQuestions: subTotal, totalCorrect: subCorrect, accent: sub.accent, bg: sub.bg, border: sub.border, emoji: sub.emoji, name: sub.name };
+
+    subjectSummaries[sub.id] = {
+      sessions: sessions.length, avgScore, trend, recentScores,
+      weakTopics, strongTopics, topicStats,
+      totalQuestions: subTotal, totalCorrect: subCorrect,
+      firstScore, recentScore, improvementDelta,
+      difficultyHistory, avgDifficulty,
+      persistentErrors, totalTimeSeconds,
+      accent: sub.accent, bg: sub.bg, border: sub.border, emoji: sub.emoji, name: sub.name
+    };
   });
 
-  // Weekly activity: count sessions per week for last 6 weeks
+  // Weekly activity
   const now = Date.now();
   const weeklyActivity = Array.from({length:6}, (_,i) => {
     const wStart = now - (i+1)*7*86400000, wEnd = now - i*7*86400000;
     return allSessionsFlat.filter(s => { const d = new Date(s.date).getTime(); return d >= wStart && d < wEnd; }).length;
   }).reverse();
 
-  // Recent activity feed (last 8 sessions across all subjects)
+  // Consistency score: sessions in last 14 days / 14
+  const recentDays = new Set(allSessionsFlat
+    .filter(s => Date.now() - new Date(s.date).getTime() < 14*86400000)
+    .map(s => new Date(s.date).toISOString().slice(0,10))
+  ).size;
+  const consistencyScore = Math.round((recentDays / 14) * 100);
+
+  // Total time across all subjects
+  const totalTimeSeconds = Object.values(subjectSummaries).reduce((a,s) => a + (s.totalTimeSeconds||0), 0);
+
   allSessionsFlat.sort((a,b) => new Date(b.date) - new Date(a.date));
   const recentActivity = allSessionsFlat.slice(0, 8);
 
-  // SRS health
+  // SRS health — deeper analytics
+  const today = new Date().toISOString().slice(0,10);
   const totalCards = srsCards.length;
-  const dueCards = srsCards.filter(c => c.dueDate <= new Date().toISOString().slice(0,10)).length;
+  const dueCards = srsCards.filter(c => c.dueDate <= today).length;
   const masteredCards = srsCards.filter(c => c.streak >= 5).length;
+  const avgEaseFactor = totalCards > 0
+    ? Math.round(srsCards.reduce((a,c) => a + (c.easeFactor||2.5), 0) / totalCards * 100) / 100
+    : 2.5;
+  const avgInterval = totalCards > 0
+    ? Math.round(srsCards.reduce((a,c) => a + (c.interval||1), 0) / totalCards)
+    : 1;
+  // Cards overdue by > 3 days = deeply forgotten
+  const overdueCards = srsCards.filter(c => {
+    const daysPast = Math.floor((Date.now() - new Date(c.dueDate).getTime()) / 86400000);
+    return daysPast > 3;
+  }).length;
 
   return {
     username, displayName,
     totalSessions, totalQuestions, totalCorrect,
+    totalTimeSeconds,
     avgScore: totalQuestions > 0 ? Math.round((totalCorrect/totalQuestions)*100) : 0,
     currentStreak: stats?.currentStreak || 0,
     bestStreak: stats?.bestStreak || 0,
-    weeklyActivity,
+    weeklyActivity, consistencyScore,
     subjectSummaries,
     recentActivity,
-    srsHealth: { totalCards, dueCards, masteredCards },
+    srsHealth: { totalCards, dueCards, masteredCards, avgEaseFactor, avgInterval, overdueCards },
     activeSince: allSessionsFlat.length > 0 ? allSessionsFlat[allSessionsFlat.length-1].date : null,
   };
 }
 
 // AI-generated narrative insight for parent report
 async function generateStudentInsightReport(dashData) {
-  const subjectLines = SUBJECTS
-    .filter(s => dashData.subjectSummaries[s.id]?.sessions > 0)
-    .map(s => {
-      const d = dashData.subjectSummaries[s.id];
-      return `${s.name}: ${d.sessions} sessions, avg ${d.avgScore}%, trend: ${d.trend}, weak areas: ${d.weakTopics.map(w=>w.topic).join(", ")||"none identified"}`;
-    }).join("\n");
+  const fmt = (n) => n !== null && n !== undefined ? String(n) : "N/A";
+  const fmtMins = (secs) => secs > 0 ? `${Math.round(secs/60)} min` : "0 min";
 
-  const prompt = `You are an educational advisor preparing a thoughtful progress report for a parent about their child's learning.
+  // Build rich per-subject evidence block
+  const activeSubjects = SUBJECTS.filter(s => dashData.subjectSummaries[s.id]?.sessions > 0);
+  const subjectBlocks = activeSubjects.map(s => {
+    const d = dashData.subjectSummaries[s.id];
+    const delta = d.improvementDelta !== null ? (d.improvementDelta >= 0 ? `+${d.improvementDelta}%` : `${d.improvementDelta}%`) : "insufficient data";
+    const weakList = d.weakTopics.length
+      ? d.weakTopics.map(w => `${topicLabel(w.topic)} (${w.accuracy}% accuracy over ${w.attempts} attempts)`).join("; ")
+      : "none below threshold";
+    const strongList = d.strongTopics.length
+      ? d.strongTopics.map(w => `${topicLabel(w.topic)} (${w.accuracy}%)`).join("; ")
+      : "none yet above threshold";
+    const persErrors = d.persistentErrors.length
+      ? d.persistentErrors.map(e => `"${e.question}" missed ${e.times}x`).join("; ")
+      : "none";
+    const diffLabel = ["Starter","Building","Challenging"][Math.round(d.avgDifficulty)] || "Building";
+    return [
+      `SUBJECT: ${s.name}`,
+      `  Sessions: ${d.sessions} | Questions: ${d.totalQuestions} | Accuracy: ${d.avgScore}% | Time invested: ${fmtMins(d.totalTimeSeconds)}`,
+      `  First session score: ${fmt(d.firstScore)}% → Most recent: ${fmt(d.recentScore)}% (change: ${delta})`,
+      `  Trend (last 3 vs prior 3 sessions): ${d.trend}`,
+      `  Average difficulty level reached: ${diffLabel}`,
+      `  Strong topics: ${strongList}`,
+      `  Weak topics: ${weakList}`,
+      `  Persistent errors (wrong 2+ times): ${persErrors}`,
+      `  Score history (recent→oldest): ${d.recentScores.slice(0,6).map(s=>s+"%").join(", ")}`,
+    ].join("\n");
+  }).join("\n\n");
 
-Student: ${dashData.displayName}
-Total practice sessions: ${dashData.totalSessions}
-Total questions answered: ${dashData.totalQuestions}
-Overall accuracy: ${dashData.avgScore}%
-Current streak: ${dashData.currentStreak} days
-Spaced review cards mastered: ${dashData.srsHealth.masteredCards} of ${dashData.srsHealth.totalCards}
+  // SRS retention analytics
+  const srs = dashData.srsHealth;
+  const retentionStrength = srs.avgEaseFactor >= 2.3 ? "strong" : srs.avgEaseFactor >= 1.8 ? "moderate" : "weak";
+  const forgettingRisk = srs.overdueCards > 5 ? "high" : srs.overdueCards > 0 ? "moderate" : "low";
+  const srsBlock = srs.totalCards > 0 ? [
+    `SPACED REPETITION (Ebbinghaus forgetting curve data):`,
+    `  Total flashcard concepts tracked: ${srs.totalCards}`,
+    `  Cards mastered (5+ consecutive recalls): ${srs.masteredCards} (${Math.round(srs.masteredCards/srs.totalCards*100)}%)`,
+    `  Cards due for review today: ${srs.dueCards}`,
+    `  Cards overdue >3 days (high forgetting risk): ${srs.overdueCards}`,
+    `  Average ease factor: ${srs.avgEaseFactor} (2.5=ideal; below 1.8=struggling to retain)`,
+    `  Average recall interval: ${srs.avgInterval} days — retention strength: ${retentionStrength}`,
+    `  Forgetting risk level: ${forgettingRisk}`,
+  ].join("\n") : "No spaced repetition data yet.";
 
-Performance by subject:
-${subjectLines}
+  // Engagement/consistency analytics
+  const weeklyMax = Math.max(...dashData.weeklyActivity, 1);
+  const recentWeeks = dashData.weeklyActivity.slice(-3);
+  const olderWeeks = dashData.weeklyActivity.slice(0,3);
+  const recentAvg = recentWeeks.reduce((a,b)=>a+b,0)/3;
+  const olderAvg = olderWeeks.reduce((a,b)=>a+b,0)/3;
+  const engagementTrend = recentAvg > olderAvg + 0.5 ? "increasing" : recentAvg < olderAvg - 0.5 ? "decreasing" : "stable";
+  const totalMins = Math.round(dashData.totalTimeSeconds/60);
 
-Weekly session counts (oldest to newest, last 6 weeks): ${dashData.weeklyActivity.join(", ")}
+  const engagementBlock = [
+    `ENGAGEMENT & CONSISTENCY:`,
+    `  Total study time: ${totalMins} minutes across ${dashData.totalSessions} sessions`,
+    `  Active days in last 14 days: ${Math.round(dashData.consistencyScore/100*14)} of 14 (${dashData.consistencyScore}% consistency)`,
+    `  Current streak: ${dashData.currentStreak} days | Best streak: ${dashData.bestStreak} days`,
+    `  Weekly sessions (oldest→newest): ${dashData.weeklyActivity.join(", ")}`,
+    `  Engagement trend (recent 3 weeks vs prior 3): ${engagementTrend}`,
+    `  Peak week: ${weeklyMax} sessions`,
+  ].join("\n");
 
-Write a warm, specific, data-driven parent report. Return ONLY a JSON object — no markdown, no extra text.
-Format:
+  const prompt = `You are an educational psychologist and learning scientist writing a detailed, evidence-based progress report for a parent. Your report must be grounded in cognitive science and cite specific data points from the student's actual performance record.
+
+${engagementBlock}
+
+${srsBlock}
+
+${subjectBlocks}
+
+SCIENTIFIC FRAMEWORKS TO APPLY (use whichever are supported by the data):
+- Ebbinghaus Forgetting Curve: declining ease factors and overdue SRS cards indicate rapid forgetting — flag this specifically
+- Retrieval Practice Effect (Roediger & Karpicke): high question volume with good accuracy = strong encoding; low accuracy despite repetition = surface processing
+- Desirable Difficulties (Bjork): reaching Challenging difficulty level indicates productive struggle; staying at Starter may signal avoidance
+- Spaced Practice vs. Massed Practice: session frequency pattern reveals whether student is distributing practice beneficially
+- Zone of Proximal Development (Vygotsky): adaptive difficulty data shows whether student is working in their growth zone
+- Interleaving Effect: if Mix sessions exist, compare performance to single-topic sessions
+- Automaticity and Fluency: persistent errors on the same question indicate the concept has not reached automaticity
+
+STRICT WRITING RULES — violations will make this report useless:
+1. Every observation MUST cite a specific number from the data above. No sentence like "is improving" without saying "improved from X% to Y%"
+2. Name specific subjects and topics — never say "some subjects" or "certain areas"
+3. Persistent errors must be named explicitly if present
+4. SRS data must be interpreted through the Ebbinghaus lens
+5. Difficulty trajectory must be interpreted through Bjork/ZPD lens
+6. Engagement pattern must connect to spaced practice research
+7. Recommendations must be specific actions (e.g. "focus 10 min/day on X topic" not "keep practicing")
+8. Write at an educated-parent reading level — explain any scientific terms briefly
+9. The student message must reference something specific they achieved
+
+Return ONLY a valid JSON object, no markdown, nothing before { or after }.
 {
-  "headline": "One sentence summary of overall trajectory (specific, not generic)",
-  "strengths": ["2-3 specific observed strengths with subject/topic evidence"],
-  "growth_areas": ["2-3 specific areas needing attention with subject/topic evidence"],
-  "patterns": "2-3 sentences on observed learning patterns (e.g. consistency, best subjects, improvement rate)",
-  "recommendation": "2-3 sentences of specific, actionable next steps for the parent",
-  "encouragement": "One warm, specific sentence directly to the student (name them)"
+  "headline": "One precise sentence naming the student, their strongest subject with score, and overall trajectory with specific numbers",
+  "data_highlights": [
+    "3-4 bullet observations, each citing a specific metric. Format: 'OBSERVATION: [what] — EVIDENCE: [exact numbers]'"
+  ],
+  "strengths": [
+    "2-3 strengths, each naming a subject/topic with accuracy %, trend, and what the data suggests about their learning"
+  ],
+  "growth_areas": [
+    "2-3 growth areas, each naming the specific topic, exact accuracy, and how many attempts without mastery"
+  ],
+  "learning_science_note": "2-3 sentences applying ONE specific research finding to this student's data — name the researcher/theory and explain what the data shows through that lens",
+  "patterns": "2-3 sentences on behavioral/engagement patterns with specific numbers: consistency %, session frequency, time invested, difficulty level reached",
+  "recommendation": "3 concrete, numbered action steps with specifics (subject, topic, frequency, goal metric)",
+  "encouragement": "One sentence to the student by name citing one specific achievement with a real number"
 }`;
 
-  const res = await callAPI([{ role:"user", content: prompt }], 1000);
+  const res = await callAPI([{ role:"user", content: prompt }], 1800);
   const text = await res.text();
   if (!res.ok) throw new Error(`API ${res.status}`);
   const data = JSON.parse(text);
@@ -2533,19 +2675,43 @@ ${SCHEMA_INSTRUCTIONS}`;
                             </div>
                           );
                         })()}
-                        {/* Weak topics */}
-                        {s.weakTopics.length > 0 && (
-                          <div>
-                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Needs Attention</div>
-                            {s.weakTopics.map(({topic,count}) => (
-                              <div key={topic} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #F0EEE9" }}>
-                                <span style={{ fontSize:12, color:"#555" }}>{topicLabel(topic)}</span>
-                                <span style={{ fontSize:11, color:NEG_COLOR, fontFamily:"monospace", fontWeight:700 }}>{count} missed</span>
+                        {/* Strong topics */}
+                        {s.strongTopics?.length > 0 && (
+                          <div style={{ marginBottom:10 }}>
+                            <div style={{ fontSize:10, color:POS_COLOR, letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Strong Areas</div>
+                            {s.strongTopics.map(({topic,accuracy,attempts}) => (
+                              <div key={topic} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #F0EEE9" }}>
+                                <span style={{ fontSize:12, color:"#166534" }}>{topicLabel(topic)}</span>
+                                <span style={{ fontSize:11, color:POS_COLOR, fontFamily:"monospace", fontWeight:700 }}>{accuracy}% ({attempts} attempts)</span>
                               </div>
                             ))}
                           </div>
                         )}
-                        {s.weakTopics.length === 0 && s.sessions > 0 && (
+                        {/* Weak topics */}
+                        {s.weakTopics.length > 0 && (
+                          <div style={{ marginBottom: s.persistentErrors?.length > 0 ? 10 : 0 }}>
+                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Needs Attention</div>
+                            {s.weakTopics.map(({topic,accuracy,attempts}) => (
+                              <div key={topic} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #F0EEE9" }}>
+                                <span style={{ fontSize:12, color:"#555" }}>{topicLabel(topic)}</span>
+                                <span style={{ fontSize:11, color:NEG_COLOR, fontFamily:"monospace", fontWeight:700 }}>{accuracy}% over {attempts} tries</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Persistent errors */}
+                        {s.persistentErrors?.length > 0 && (
+                          <div>
+                            <div style={{ fontSize:10, color:NEG_COLOR, letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>⚠ Repeated Errors</div>
+                            {s.persistentErrors.map(({question,times},i) => (
+                              <div key={i} style={{ padding:"6px 0", borderBottom:"1px solid #F0EEE9" }}>
+                                <div style={{ fontSize:11, color:"#555", lineHeight:1.5 }}>"{question}"</div>
+                                <div style={{ fontSize:10, color:NEG_COLOR, fontFamily:"monospace", marginTop:2 }}>missed {times}× across sessions</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {s.weakTopics.length === 0 && !s.persistentErrors?.length && s.sessions > 0 && (
                           <div style={{ fontSize:12, color:POS_COLOR, fontWeight:700 }}>✓ No persistent weak spots detected</div>
                         )}
                       </div>
@@ -2569,17 +2735,33 @@ ${SCHEMA_INSTRUCTIONS}`;
                       return (
                         <div style={{ animation:"fade-in .3s ease" }}>
                           {/* Headline */}
-                          <div style={{ background:"#EEF3FA", border:"1.5px solid #1E3A5F22", borderRadius:12, padding:"18px 20px", marginBottom:18 }}>
+                          <div style={{ background:"#EEF3FA", border:"1.5px solid #1E3A5F22", borderRadius:12, padding:"18px 20px", marginBottom:16 }}>
                             <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Overall Assessment</div>
-                            <div style={{ fontSize:16, fontWeight:700, color:"#1E3A5F", lineHeight:1.6 }}>{ins.headline}</div>
+                            <div style={{ fontSize:15, fontWeight:700, color:"#1E3A5F", lineHeight:1.7 }}>{ins.headline}</div>
                           </div>
 
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:18 }}>
+                          {/* Data highlights — new field */}
+                          {(ins.data_highlights||[]).length > 0 && (
+                            <div style={{ background:"#1E3A5F", border:"1.5px solid #1E3A5F", borderRadius:12, padding:"16px 18px", marginBottom:16 }}>
+                              <div style={{ fontSize:10, color:"#B8C8D8", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>📊 Data Highlights</div>
+                              {(ins.data_highlights||[]).map((s,i) => {
+                                const parts = s.split("— EVIDENCE:");
+                                return (
+                                  <div key={i} style={{ marginBottom:10, paddingBottom:10, borderBottom: i < ins.data_highlights.length-1 ? "1px solid #ffffff18" : "none" }}>
+                                    {parts[0] && <div style={{ fontSize:13, color:"#E8F0F8", lineHeight:1.6, fontWeight:600 }}>{parts[0].replace("OBSERVATION:","").trim()}</div>}
+                                    {parts[1] && <div style={{ fontSize:12, color:"#7A9CBD", lineHeight:1.5, marginTop:3, fontFamily:"monospace" }}>→ {parts[1].trim()}</div>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
                             {/* Strengths */}
                             <div style={{ background:"#F0FDF4", border:"1.5px solid #BBF7D0", borderRadius:12, padding:"16px" }}>
                               <div style={{ fontSize:10, color:POS_COLOR, letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>✓ Strengths</div>
                               {(ins.strengths||[]).map((s,i) => (
-                                <div key={i} style={{ fontSize:13, color:"#166534", lineHeight:1.7, marginBottom:6, paddingLeft:8, borderLeft:`2px solid ${POS_COLOR}` }}>
+                                <div key={i} style={{ fontSize:12, color:"#166534", lineHeight:1.75, marginBottom:8, paddingLeft:10, borderLeft:`2px solid ${POS_COLOR}` }}>
                                   {s}
                                 </div>
                               ))}
@@ -2588,23 +2770,31 @@ ${SCHEMA_INSTRUCTIONS}`;
                             <div style={{ background:"#FFF7ED", border:"1.5px solid #FED7AA", borderRadius:12, padding:"16px" }}>
                               <div style={{ fontSize:10, color:"#D97706", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>↑ Growth Areas</div>
                               {(ins.growth_areas||[]).map((s,i) => (
-                                <div key={i} style={{ fontSize:13, color:"#92400E", lineHeight:1.7, marginBottom:6, paddingLeft:8, borderLeft:"2px solid #D97706" }}>
+                                <div key={i} style={{ fontSize:12, color:"#92400E", lineHeight:1.75, marginBottom:8, paddingLeft:10, borderLeft:"2px solid #D97706" }}>
                                   {s}
                                 </div>
                               ))}
                             </div>
                           </div>
 
+                          {/* Learning science note — new field */}
+                          {ins.learning_science_note && (
+                            <div style={{ background:"#F5F3FF", border:"1.5px solid #c084fc44", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+                              <div style={{ fontSize:10, color:"#7c3aed", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>🔬 Learning Science</div>
+                              <div style={{ fontSize:13, color:"#4c1d95", lineHeight:1.85 }}>{ins.learning_science_note}</div>
+                            </div>
+                          )}
+
                           {/* Patterns */}
                           <div style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
-                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>Learning Patterns</div>
-                            <div style={{ fontSize:14, color:"#444", lineHeight:1.85 }}>{ins.patterns}</div>
+                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>📈 Engagement Patterns</div>
+                            <div style={{ fontSize:13, color:"#444", lineHeight:1.85 }}>{ins.patterns}</div>
                           </div>
 
                           {/* Recommendation */}
                           <div style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
-                            <div style={{ fontSize:10, color:"#92400E", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>💡 Recommended Next Steps</div>
-                            <div style={{ fontSize:14, color:"#78350F", lineHeight:1.85 }}>{ins.recommendation}</div>
+                            <div style={{ fontSize:10, color:"#92400E", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>💡 Action Plan</div>
+                            <div style={{ fontSize:13, color:"#78350F", lineHeight:1.9, whiteSpace:"pre-line" }}>{ins.recommendation}</div>
                           </div>
 
                           {/* Encouragement */}
