@@ -1764,6 +1764,22 @@ async function updateStats(sessionPct, username) {
 // ─── Curriculum Library storage (admin-managed, shared across all students) ───
 function curriculumKey(subjectId) { return `curriculum-${subjectId}`; }
 
+// ─── Test Prep storage ────────────────────────────────────────────────────────
+function testPrepKey(username) { return `testpreps-${username}`; }
+
+async function loadTestPreps(username) {
+  try {
+    const r = await storage.get(testPrepKey(username));
+    return r ? JSON.parse(r.value) : [];
+  } catch { return []; }
+}
+
+async function saveTestPreps(preps, username) {
+  try {
+    await storage.set(testPrepKey(username), JSON.stringify(preps));
+  } catch(e) { console.error("saveTestPreps error", e); }
+}
+
 async function loadCurriculum(subjectId) {
   try {
     const r = await storage.get(curriculumKey(subjectId), true); // shared=true
@@ -1775,6 +1791,97 @@ async function saveCurriculum(topics, subjectId) {
   try {
     await storage.set(curriculumKey(subjectId), JSON.stringify(topics), true); // shared=true
   } catch(e) { console.error("saveCurriculum error", e); }
+}
+
+// ─── Test Prep AI Plan Generator ────────────────────────────────────────────
+async function generateTestPrepPlan({ subject, testDate, topics, materialsB64, materialsType, masteryData, username }) {
+  const daysUntil = Math.max(1, Math.round((new Date(testDate) - new Date()) / 86400000));
+  // Sessions: 1 per day max 7, min 1; scale question count by days available
+  const maxSessions = Math.min(daysUntil, 7);
+  const qPerSession = daysUntil <= 2 ? 20 : daysUntil <= 4 ? 15 : 10;
+
+  // Build mastery summary for this subject
+  const subMastery = masteryData?.subjectSummaries?.[subject.id];
+  const masteryBlock = subMastery
+    ? `EXISTING MASTERY DATA for ${subject.name}:
+- Recent accuracy: ${subMastery.avgScore}%
+- Mastery score: ${subMastery.avgMastery || "N/A"}
+- Strong topics: ${(subMastery.strongTopics||[]).map(t=>`${t.topic} (${t.accuracy}%)`).join(", ") || "none recorded"}
+- Weak topics: ${(subMastery.weakTopics||[]).map(t=>`${t.topic} (${t.accuracy}%)`).join(", ") || "none recorded"}
+- Persistent errors: ${(subMastery.persistentErrors||[]).map(t=>t.question).join("; ") || "none"}`
+    : `No prior mastery data for ${subject.name} — treat all topics as equally important.`;
+
+  const topicList = topics.length ? topics.join(", ") : "all topics in the uploaded materials";
+
+  const blocks = [];
+
+  // Include uploaded materials if provided
+  if (materialsB64 && materialsType) {
+    blocks.push(materialsType === "application/pdf"
+      ? { type:"document", source:{ type:"base64", media_type:"application/pdf", data:materialsB64 } }
+      : { type:"image", source:{ type:"base64", media_type:materialsType, data:materialsB64 } }
+    );
+  }
+
+  blocks.push({ type:"text", text:`You are an expert study planner for a 6th grader preparing for an upcoming ${subject.name} test.
+
+TEST DETAILS:
+- Subject: ${subject.name}
+- Test date: ${testDate} (${daysUntil} day${daysUntil!==1?"s":""} away)
+- Topics to cover: ${topicList}
+- Max sessions available: ${maxSessions}
+- Questions per session: ~${qPerSession}
+
+${masteryBlock}
+
+${materialsB64 ? "REVIEW MATERIALS: Analyze the uploaded document to extract the exact topics, vocabulary, problem types, and difficulty level expected on this test. Use these to calibrate every session." : ""}
+
+YOUR TASK: Create an optimal spaced study plan. Apply these principles:
+1. Front-load hardest/weakest topics — first sessions tackle the most difficult material
+2. Interleave topics across sessions (don't do all of one topic in one session)
+3. Final session (day before or day of): shorter, confidence-building — only already-mastered topics, easier difficulty
+4. Weight sessions toward documented weak topics from mastery data
+5. Each session should feel achievable in 10-20 minutes
+
+Return ONLY valid JSON — no markdown, no explanation:
+{
+  "planTitle": "short motivating title e.g. '${subject.name} Test Blitz'",
+  "planSummary": "2 sentences: what this plan covers and why it's structured this way",
+  "testDate": "${testDate}",
+  "subjectId": "${subject.id}",
+  "sessions": [
+    {
+      "sessionNumber": 1,
+      "title": "short session title e.g. 'Core Concepts'",
+      "scheduledDate": "YYYY-MM-DD",
+      "focus": "2 sentence description of what this session targets and why",
+      "topics": ["topicKey1", "topicKey2"],
+      "topicNames": ["Human-readable name 1", "Human-readable name 2"],
+      "questionCount": ${qPerSession},
+      "difficulty": 1,
+      "difficultyNotes": "specific calibration: what complexity, vocabulary, steps to match",
+      "isConfidenceBuilder": false
+    }
+  ],
+  "topicsExtracted": ["if materials uploaded: list topics found in review doc"],
+  "difficultyCalibration": "overall calibration note: what level this test targets based on materials"
+}
+
+DIFFICULTY: 0=Starter, 1=Building, 2=Challenging. Use 1 for most sessions; 2 for early sessions on weak topics; 0 only for the final confidence-builder.` });
+
+  const res = await callAPI(blocks, 2000);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = JSON.parse(await res.text());
+  const raw = data.content?.find(b=>b.type==="text")?.text || "";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("No JSON in plan response");
+  const plan = JSON.parse(match[0]);
+  plan.id = `tp_${Date.now()}`;
+  plan.createdAt = new Date().toISOString();
+  plan.createdBy = username;
+  plan.status = "active";
+  plan.completedSessions = [];
+  return plan;
 }
 
 // ─── Topic Bank storage ──────────────────────────────────────────────────────
@@ -2278,6 +2385,16 @@ export default function App() {
   const [prefetchedProblems, setPrefetchedProblems] = useState([]);
   const [isPrefetching, setIsPrefetching] = useState(false);
   const [waitingForQuestions, setWaitingForQuestions] = useState(false);
+
+  // ── Test Prep state ──────────────────────────────────────────────────────
+  const [testPreps, setTestPreps] = useState([]);          // all active preps for user
+  const [activeTestPrep, setActiveTestPrep] = useState(null); // prep driving current session
+  const [testPrepScreen, setTestPrepScreen] = useState(null); // "setup1"|"setup2"|"setup3"|"plan"|null
+  const [tpSetup, setTpSetup] = useState({               // setup wizard state
+    subject: null, testDate: "", topics: [], topicInput: "",
+    materials: null, materialsB64: null, materialsType: null, generatingPlan: false,
+  });
+  const [tpPlanLoading, setTpPlanLoading] = useState(false);
   const prefetchedRef = useRef([]);
   const [bookTitle, setBookTitle] = useState("");             // book title for English
   const [bookChapter, setBookChapter] = useState("");         // chapter or chapter range
@@ -2338,6 +2455,7 @@ export default function App() {
     if (!subject || !currentUser) return;
     loadStats(currentUser.username).then(setHomeStats);
     loadTopicBank(subject.id, currentUser.username).then(setTopicBank);
+    loadTestPreps(currentUser.username).then(setTestPreps);
     loadCurriculum(subject.id).then(setCurriculumTopics);
     loadSrsCards(currentUser.username).then(setSrsCards);
     loadSessions(subject.id, currentUser.username).then(sessions => {
@@ -2538,6 +2656,26 @@ export default function App() {
       // Ingest session questions into SRS system
       ingestSessionToSrs(log, subject?.id||"math", hwTopic?.topicKey||"general", currentUser?.username)
         .then(() => loadSrsCards(currentUser?.username).then(setSrsCards));
+
+      // If this session was part of a test prep, mark it complete
+      if (activeTestPrep) {
+        const sessionPct2 = Math.round((log.filter(l=>l.ok).length/log.length)*100);
+        const updatedPrep = {
+          ...activeTestPrep,
+          completedSessions: [...(activeTestPrep.completedSessions||[]), {
+            sessionNumber: activeTestPrep._launchSessionNumber,
+            completedAt: new Date().toISOString(),
+            score: sessionPct2,
+            questionsAnswered: log.length,
+          }]
+        };
+        loadTestPreps(currentUser?.username).then(preps => {
+          const updated = preps.map(p => p.id === updatedPrep.id ? updatedPrep : p);
+          saveTestPreps(updated, currentUser?.username);
+          setTestPreps(updated);
+          setActiveTestPrep(updatedPrep);
+        });
+      }
       const sessionCorrect = log.filter((l)=>l.ok).length;
       const sessionMastery = masteryScore(sessionCorrect, log.length, difficulty);
       saveSession({ id:Date.now().toString(), date:new Date().toISOString(), subject:subject?.id||"math", subjectName:subject?.name||"Math", timeSpent:timeTotal>0?Math.min(timeUsed,timeTotal):timeUsed, timed:timeTotal>0, difficulty, total:log.length, correct:sessionCorrect, masteryScore:sessionMastery, log:log.map(({topic,ok,question,selected,correct})=>({topic,ok,question,selected,correct})) }, subject?.id, currentUser?.username);
@@ -2610,6 +2748,7 @@ export default function App() {
       if (result.pendingApproval) { setScreen("pending"); return; }
       setCurrentUser(result.user);
       setLoginUsername(""); setLoginPassword(""); setLoginDisplayName(""); setLoginError("");
+      loadTestPreps(result.user.username).then(setTestPreps);
       setScreen("subjects");
     } finally {
       setLoginLoading(false);
@@ -2948,7 +3087,73 @@ ${SCHEMA_INSTRUCTIONS}`;
                 </div>
               </div>
             </div>
-            <div style={{ ...S.sub, marginBottom:20 }}>What are we practicing today?</div>
+            <div style={{ ...S.sub, marginBottom: testPreps.filter(p=>p.status==="active").length ? 12 : 20 }}>What are we practicing today?</div>
+
+            {/* ── Active Test Prep Banners ── */}
+            {testPreps.filter(p => p.status === "active").map(prep => {
+              const daysLeft = Math.ceil((new Date(prep.testDate) - new Date()) / 86400000);
+              const sub = SUBJECTS.find(s => s.id === prep.subjectId);
+              const completedCount = (prep.completedSessions||[]).length;
+              const totalSessions = (prep.sessions||[]).length;
+              const nextSession = (prep.sessions||[]).find(s =>
+                !(prep.completedSessions||[]).some(c => c.sessionNumber === s.sessionNumber)
+              );
+              const isOverdue = daysLeft < 0;
+              const accent = sub?.accent || "#1E3A5F";
+              return (
+                <div key={prep.id} style={{ background: accent+"12", border:`1.5px solid ${accent}44`, borderRadius:12, padding:"12px 14px", marginBottom:10, cursor:"pointer" }}
+                  onClick={() => { setTestPrepScreen("plan"); setActiveTestPrep(prep); }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
+                        <span style={{ fontSize:11, background:accent, color:"#fff", borderRadius:4, padding:"2px 7px", fontWeight:800, letterSpacing:1 }}>TEST PREP</span>
+                        <span style={{ fontSize:13, fontWeight:800, color:accent }}>{prep.planTitle}</span>
+                      </div>
+                      <div style={{ fontSize:11, color:"#9A9490" }}>
+                        {sub?.name} · {isOverdue ? "Test was " + Math.abs(daysLeft) + " days ago" : daysLeft === 0 ? "Test is TODAY" : `${daysLeft} day${daysLeft!==1?"s":""} until test`}
+                        {" · "}{completedCount}/{totalSessions} sessions done
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:22, fontWeight:900, color: daysLeft<=1?"#dc2626":daysLeft<=3?"#D97706":accent, fontFamily:"monospace" }}>{Math.max(0,daysLeft)}</div>
+                      <div style={{ fontSize:9, color:"#9A9490", letterSpacing:1 }}>DAYS LEFT</div>
+                    </div>
+                  </div>
+                  {nextSession && (
+                    <button onClick={e => {
+                      e.stopPropagation();
+                      const subj = SUBJECTS.find(s => s.id === prep.subjectId);
+                      setSubject(subj);
+                      setActiveTestPrep({ ...prep, _launchSessionNumber: nextSession.sessionNumber });
+                      setHwTopic({
+                        topicName: nextSession.title,
+                        topicKey: nextSession.topics?.[0] || "general",
+                        description: nextSession.focus,
+                        difficultyNotes: nextSession.difficultyNotes,
+                        _fromCurriculum: true,
+                      });
+                      setDifficulty(nextSession.difficulty ?? 1);
+                      setHwFile(null);
+                      setScreen("confirm");
+                    }} style={{ marginTop:8, width:"100%", padding:"8px", background:accent, border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer" }}>
+                      ▶ Start Session {nextSession.sessionNumber}: {nextSession.title}
+                    </button>
+                  )}
+                  {!nextSession && completedCount === totalSessions && (
+                    <div style={{ marginTop:6, fontSize:11, color:accent, fontWeight:800 }}>✓ All sessions complete — great work!</div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* ── Test Prep button ── */}
+            <button onClick={() => { setTpSetup({ subject:null, testDate:"", topics:[], topicInput:"", materials:null, materialsB64:null, materialsType:null, generatingPlan:false }); setTestPrepScreen("setup1"); }}
+              style={{ width:"100%", padding:"11px 14px", background:"transparent", border:"1.5px dashed #1E3A5F44", borderRadius:10, color:"#1E3A5F", fontSize:12, fontWeight:800, cursor:"pointer", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"center", gap:8, letterSpacing:1 }}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#1E3A5F" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="16" y2="14"/>
+              </svg>
+              CREATE TEST PREP
+            </button>
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:24 }}>
               {SUBJECTS.map(sub => (
@@ -4225,6 +4430,327 @@ ${SCHEMA_INSTRUCTIONS}`;
         )}
 
         {/* ── LOADING ── */}
+
+        {/* ════════════════════════════════════════════════════════
+            TEST PREP SCREENS
+        ════════════════════════════════════════════════════════ */}
+
+        {/* SETUP STEP 1 — Subject + Date */}
+        {testPrepScreen === "setup1" && (
+          <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
+            <button onClick={() => setTestPrepScreen(null)} style={{ background:"none", border:"none", color:"#9A9490", cursor:"pointer", fontSize:12, marginBottom:12, padding:0 }}>← Back</button>
+            <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", fontWeight:700, marginBottom:4 }}>Test Prep · Step 1 of 3</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"#1E3A5F", marginBottom:20 }}>What's the test?</div>
+
+            {/* Subject picker */}
+            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Subject</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:20 }}>
+              {SUBJECTS.map(sub => (
+                <button key={sub.id} onClick={() => setTpSetup(s => ({...s, subject:sub}))}
+                  style={{ padding:"10px 12px", background:tpSetup.subject?.id===sub.id ? sub.accent+"18" : "#F8F6F3", border:`1.5px solid ${tpSetup.subject?.id===sub.id ? sub.accent : "#E2DDD8"}`, borderRadius:10, cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"all .15s" }}>
+                  <SubjectIcon id={sub.id} size={16} color={tpSetup.subject?.id===sub.id ? sub.accent : "#9A9490"} strokeWidth={1.8}/>
+                  <span style={{ fontSize:12, fontWeight:800, color:tpSetup.subject?.id===sub.id ? sub.accent : "#555" }}>{sub.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Test date */}
+            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Test Date</div>
+            <input type="date" value={tpSetup.testDate}
+              min={new Date().toISOString().split("T")[0]}
+              max={new Date(Date.now()+7*86400000).toISOString().split("T")[0]}
+              onChange={e => setTpSetup(s => ({...s, testDate:e.target.value}))}
+              style={{ width:"100%", padding:"10px 12px", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:10, fontSize:14, color:"#1E3A5F", fontWeight:700, boxSizing:"border-box", marginBottom:8 }}/>
+            {tpSetup.testDate && (() => {
+              const d = Math.ceil((new Date(tpSetup.testDate) - new Date()) / 86400000);
+              return <div style={{ fontSize:11, color: d<=1?"#dc2626":d<=3?"#D97706":"#16a34a", fontWeight:700, marginBottom:16 }}>
+                {d <= 0 ? "⚠️ That date has passed" : d === 1 ? "⚡ Tomorrow — we'll make it count!" : d <= 3 ? `⏰ ${d} days — focused plan` : `📅 ${d} days — solid prep time`}
+              </div>;
+            })()}
+
+            <button onClick={() => { if (tpSetup.subject && tpSetup.testDate && new Date(tpSetup.testDate) > new Date()) setTestPrepScreen("setup2"); }}
+              disabled={!tpSetup.subject || !tpSetup.testDate || new Date(tpSetup.testDate) <= new Date()}
+              style={{ width:"100%", padding:"12px", background:"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer", opacity:!tpSetup.subject||!tpSetup.testDate||new Date(tpSetup.testDate)<=new Date()?0.4:1 }}>
+              Next: Add Topics →
+            </button>
+          </div>
+        )}
+
+        {/* SETUP STEP 2 — Topics */}
+        {testPrepScreen === "setup2" && (
+          <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
+            <button onClick={() => setTestPrepScreen("setup1")} style={{ background:"none", border:"none", color:"#9A9490", cursor:"pointer", fontSize:12, marginBottom:12, padding:0 }}>← Back</button>
+            <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", fontWeight:700, marginBottom:4 }}>Test Prep · Step 2 of 3</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"#1E3A5F", marginBottom:4 }}>What topics?</div>
+            <div style={{ fontSize:12, color:"#9A9490", marginBottom:16 }}>Add topics from your curriculum or type them in. Or skip — we'll extract them from your review materials.</div>
+
+            {/* Topic chips */}
+            {tpSetup.topics.length > 0 && (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>
+                {tpSetup.topics.map((t, i) => (
+                  <span key={i} style={{ background:tpSetup.subject?.accent+"18", border:`1px solid ${tpSetup.subject?.accent}44`, borderRadius:20, padding:"4px 10px", fontSize:11, fontWeight:700, color:tpSetup.subject?.accent, display:"flex", alignItems:"center", gap:5 }}>
+                    {t}
+                    <button onClick={() => setTpSetup(s=>({...s, topics:s.topics.filter((_,j)=>j!==i)}))} style={{ background:"none", border:"none", cursor:"pointer", color:"inherit", fontSize:13, lineHeight:1, padding:0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Free-form input */}
+            <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+              <input value={tpSetup.topicInput} onChange={e => setTpSetup(s=>({...s, topicInput:e.target.value}))}
+                onKeyDown={e => { if (e.key==="Enter" && tpSetup.topicInput.trim()) { setTpSetup(s=>({...s, topics:[...s.topics, s.topicInput.trim()], topicInput:""})); }}}
+                placeholder="Type a topic and press Enter…"
+                style={{ flex:1, padding:"9px 12px", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:10, fontSize:13, color:"#1E3A5F" }}/>
+              <button onClick={() => { if (tpSetup.topicInput.trim()) setTpSetup(s=>({...s, topics:[...s.topics, s.topicInput.trim()], topicInput:""})); }}
+                style={{ padding:"9px 14px", background:tpSetup.subject?.accent||"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontWeight:800, cursor:"pointer", fontSize:13 }}>+</button>
+            </div>
+
+            {/* Curriculum library quick-add */}
+            {(() => {
+              const [currTopics, setCurrTopics] = React.useState([]);
+              React.useEffect(() => { if (tpSetup.subject) loadCurriculum(tpSetup.subject.id).then(setCurrTopics); }, [tpSetup.subject?.id]);
+              if (!currTopics.length) return null;
+              return (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:9, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Quick-add from library</div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                    {currTopics.map(t => {
+                      const already = tpSetup.topics.includes(t.topicName);
+                      return (
+                        <button key={t.topicKey} onClick={() => { if (!already) setTpSetup(s=>({...s, topics:[...s.topics, t.topicName]})); }}
+                          style={{ padding:"4px 10px", background:already?"#F0EEE9":"#fff", border:`1px solid ${tpSetup.subject?.accent||"#1E3A5F"}33`, borderRadius:20, fontSize:11, fontWeight:700, color:already?"#C0BCB8":tpSetup.subject?.accent||"#1E3A5F", cursor:already?"default":"pointer" }}>
+                          {already ? "✓ " : ""}{t.topicName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{ fontSize:11, color:"#9A9490", marginBottom:16, fontStyle:"italic" }}>
+              💡 No topics added? That's fine — if you upload review materials in the next step, the AI will extract topics automatically.
+            </div>
+
+            <button onClick={() => setTestPrepScreen("setup3")}
+              style={{ width:"100%", padding:"12px", background:"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer" }}>
+              Next: Upload Materials →
+            </button>
+          </div>
+        )}
+
+        {/* SETUP STEP 3 — Materials + Generate */}
+        {testPrepScreen === "setup3" && (
+          <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
+            <button onClick={() => setTestPrepScreen("setup2")} style={{ background:"none", border:"none", color:"#9A9490", cursor:"pointer", fontSize:12, marginBottom:12, padding:0 }}>← Back</button>
+            <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", fontWeight:700, marginBottom:4 }}>Test Prep · Step 3 of 3</div>
+            <div style={{ fontSize:22, fontWeight:900, color:"#1E3A5F", marginBottom:4 }}>Upload materials</div>
+            <div style={{ fontSize:12, color:"#9A9490", marginBottom:16 }}>Optional but powerful. Upload your review guide, previous homeworks, or class notes — the AI will calibrate every question to match the exact difficulty of your test.</div>
+
+            {/* Upload area */}
+            {!tpSetup.materials ? (
+              <label style={{ display:"block", border:"2px dashed #E2DDD8", borderRadius:12, padding:"28px 16px", textAlign:"center", cursor:"pointer", marginBottom:16, background:"#FAFAF8" }}>
+                <input type="file" accept="image/*,.pdf" style={{ display:"none" }}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      const b64 = ev.target.result.split(",")[1];
+                      setTpSetup(s=>({...s, materials:file.name, materialsB64:b64, materialsType:file.type}));
+                    };
+                    reader.readAsDataURL(file);
+                  }}/>
+                <div style={{ fontSize:28, marginBottom:8 }}>📄</div>
+                <div style={{ fontSize:13, fontWeight:700, color:"#555", marginBottom:4 }}>Tap to upload</div>
+                <div style={{ fontSize:11, color:"#9A9490" }}>JPG, PNG, PDF — review guide, homework, class notes</div>
+              </label>
+            ) : (
+              <div style={{ background:"#F0FDF4", border:"1px solid #86efac", borderRadius:10, padding:"12px 14px", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#16a34a" }}>✓ {tpSetup.materials}</div>
+                  <div style={{ fontSize:11, color:"#9A9490" }}>AI will use this to calibrate question difficulty</div>
+                </div>
+                <button onClick={() => setTpSetup(s=>({...s, materials:null, materialsB64:null, materialsType:null}))}
+                  style={{ background:"none", border:"none", color:"#9A9490", cursor:"pointer", fontSize:18 }}>×</button>
+              </div>
+            )}
+
+            {/* Summary before generation */}
+            <div style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
+              <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Plan Preview</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {[
+                  ["Subject", tpSetup.subject?.name],
+                  ["Test date", tpSetup.testDate ? new Date(tpSetup.testDate).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—"],
+                  ["Days to prep", tpSetup.testDate ? Math.ceil((new Date(tpSetup.testDate)-new Date())/86400000) : "—"],
+                  ["Topics", tpSetup.topics.length ? `${tpSetup.topics.length} selected` : "From materials"],
+                ].map(([label, val]) => (
+                  <div key={label}>
+                    <div style={{ fontSize:9, color:"#9A9490", letterSpacing:1, textTransform:"uppercase" }}>{label}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:"#1E3A5F" }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={async () => {
+              if (tpSetup.generatingPlan) return;
+              setTpSetup(s=>({...s, generatingPlan:true}));
+              setTpPlanLoading(true);
+              try {
+                const plan = await generateTestPrepPlan({
+                  subject: tpSetup.subject,
+                  testDate: tpSetup.testDate,
+                  topics: tpSetup.topics,
+                  materialsB64: tpSetup.materialsB64,
+                  materialsType: tpSetup.materialsType,
+                  masteryData: dashboardData,
+                  username: currentUser?.username,
+                });
+                const existing = await loadTestPreps(currentUser?.username);
+                const updated = [...existing, plan];
+                await saveTestPreps(updated, currentUser?.username);
+                setTestPreps(updated);
+                setActiveTestPrep(plan);
+                setTestPrepScreen("plan");
+              } catch(e) {
+                setError("Could not generate plan: " + e.message);
+              } finally {
+                setTpSetup(s=>({...s, generatingPlan:false}));
+                setTpPlanLoading(false);
+              }
+            }} style={{ width:"100%", padding:"13px", background: tpSetup.subject?.accent||"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer", opacity:tpSetup.generatingPlan?0.7:1 }}>
+              {tpSetup.generatingPlan ? "🧠 Building your plan…" : "✨ Generate Study Plan"}
+            </button>
+            {tpSetup.generatingPlan && (
+              <div style={{ textAlign:"center", fontSize:11, color:"#9A9490", marginTop:10 }}>
+                Reading your materials, checking your mastery data, computing the optimal schedule…
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PLAN VIEW */}
+        {testPrepScreen === "plan" && activeTestPrep && (() => {
+          const prep = activeTestPrep;
+          const sub = SUBJECTS.find(s => s.id === prep.subjectId);
+          const accent = sub?.accent || "#1E3A5F";
+          const daysLeft = Math.ceil((new Date(prep.testDate) - new Date()) / 86400000);
+          const completedNums = new Set((prep.completedSessions||[]).map(c => c.sessionNumber));
+
+          const archivePlan = async () => {
+            const updated = testPreps.map(p => p.id===prep.id ? {...p, status:"archived"} : p);
+            await saveTestPreps(updated, currentUser?.username);
+            setTestPreps(updated);
+            setTestPrepScreen(null);
+            setActiveTestPrep(null);
+          };
+
+          return (
+            <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
+              <button onClick={() => setTestPrepScreen(null)} style={{ background:"none", border:"none", color:"#9A9490", cursor:"pointer", fontSize:12, marginBottom:12, padding:0 }}>← Back to subjects</button>
+
+              {/* Header */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+                <div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                    <SubjectIcon id={prep.subjectId} size={20} color={accent} strokeWidth={1.6}/>
+                    <div style={{ fontSize:18, fontWeight:900, color:accent }}>{prep.planTitle}</div>
+                  </div>
+                  <div style={{ fontSize:11, color:"#9A9490" }}>{prep.planSummary}</div>
+                </div>
+                {/* Countdown */}
+                <div style={{ textAlign:"center", background:accent+"12", border:`1.5px solid ${accent}33`, borderRadius:12, padding:"10px 14px", flexShrink:0 }}>
+                  <div style={{ fontSize:28, fontWeight:900, color:daysLeft<=1?"#dc2626":daysLeft<=3?"#D97706":accent, fontFamily:"monospace", lineHeight:1 }}>{Math.max(0,daysLeft)}</div>
+                  <div style={{ fontSize:9, color:"#9A9490", letterSpacing:1, textTransform:"uppercase" }}>days left</div>
+                  <div style={{ fontSize:9, color:"#9A9490", marginTop:2 }}>{new Date(prep.testDate).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ marginBottom:20 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                  <div style={{ fontSize:10, color:"#9A9490", fontWeight:700, letterSpacing:1 }}>SESSION PROGRESS</div>
+                  <div style={{ fontSize:10, color:accent, fontWeight:800 }}>{completedNums.size}/{prep.sessions.length} complete</div>
+                </div>
+                <div style={{ background:"#E2DDD8", borderRadius:4, height:6, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${(completedNums.size/prep.sessions.length)*100}%`, background:accent, borderRadius:4, transition:"width .5s ease" }}/>
+                </div>
+              </div>
+
+              {/* Session cards */}
+              <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:20 }}>
+                {prep.sessions.map(session => {
+                  const done = completedNums.has(session.sessionNumber);
+                  const isNext = !done && !prep.sessions.slice(0, session.sessionNumber-1).some(s => !completedNums.has(s.sessionNumber));
+                  const completedData = (prep.completedSessions||[]).find(c => c.sessionNumber === session.sessionNumber);
+                  const sessionDate = new Date(session.scheduledDate);
+                  const isPast = sessionDate < new Date() && !done;
+                  return (
+                    <div key={session.sessionNumber} style={{ background: done?"#F0FDF4": isNext?accent+"0f":"#F8F6F3", border:`1.5px solid ${done?"#86efac":isNext?accent+"55":"#E2DDD8"}`, borderRadius:12, padding:"12px 14px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <div style={{ width:26, height:26, borderRadius:"50%", background:done?"#16a34a":isNext?accent:"#E2DDD8", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <span style={{ fontSize:11, fontWeight:900, color:"#fff" }}>{done?"✓":session.sessionNumber}</span>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:13, fontWeight:800, color:done?"#16a34a":isNext?accent:"#9A9490" }}>{session.title}</div>
+                            <div style={{ fontSize:10, color:"#9A9490" }}>
+                              {session.scheduledDate ? new Date(session.scheduledDate).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}) : ""} · {session.questionCount}Q · {DIFFICULTY_LABELS[session.difficulty||1]}
+                              {session.isConfidenceBuilder && <span style={{ marginLeft:6, color:"#16a34a", fontWeight:700 }}>★ Confidence builder</span>}
+                              {isPast && !done && <span style={{ marginLeft:6, color:"#D97706", fontWeight:700 }}>⚠ Overdue</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {done && completedData && (
+                          <div style={{ textAlign:"right" }}>
+                            <div style={{ fontSize:15, fontWeight:900, color:"#16a34a", fontFamily:"monospace" }}>{completedData.score}%</div>
+                            <div style={{ fontSize:9, color:"#9A9490" }}>{completedData.questionsAnswered}Q</div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize:11, color:"#9A9490", lineHeight:1.5, marginBottom: isNext ? 10 : 0 }}>{session.focus}</div>
+                      {session.topicNames?.length > 0 && (
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom: isNext ? 8 : 0 }}>
+                          {session.topicNames.map((t,i) => (
+                            <span key={i} style={{ fontSize:9, background:accent+"18", border:`1px solid ${accent}33`, borderRadius:4, padding:"2px 6px", color:accent, fontWeight:700 }}>{t}</span>
+                          ))}
+                        </div>
+                      )}
+                      {isNext && (
+                        <button onClick={() => {
+                          setSubject(sub);
+                          setActiveTestPrep({...prep, _launchSessionNumber: session.sessionNumber});
+                          setHwTopic({
+                            topicName: session.title,
+                            topicKey: session.topics?.[0] || "general",
+                            description: session.focus,
+                            difficultyNotes: session.difficultyNotes || prep.difficultyCalibration,
+                            _fromCurriculum: true,
+                          });
+                          setDifficulty(session.difficulty ?? 1);
+                          setHwFile(null);
+                          setTestPrepScreen(null);
+                          setScreen("confirm");
+                        }} style={{ width:"100%", padding:"9px", background:accent, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer" }}>
+                          ▶ Start this session
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Archive button */}
+              <button onClick={archivePlan} style={{ width:"100%", padding:"9px", background:"transparent", border:"1px solid #E2DDD8", borderRadius:8, color:"#9A9490", fontSize:11, cursor:"pointer" }}>
+                Archive this plan
+              </button>
+            </div>
+          );
+        })()}
+
         {screen === "loading" && (
           <div style={{ ...S.card, textAlign:"center" }}>
             <div style={{ fontSize:38, display:"inline-block", animation:"spin 1.2s linear infinite", marginBottom:18 }}>⚙</div>
