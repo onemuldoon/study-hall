@@ -25,10 +25,10 @@ const SUBJECTS = [
     id: "math",
     name: "Math",
     emoji: "📐",
-    accent: "#E8FF45",
-    accentDim: "#3a4a00",
+    accent: "#1E3A5F",
+    accentDim: "#B8C8D8",
     bg: "#0d1400",
-    border: "#2a3a00",
+    border: "#B8C8D8",
     tagline: "Numbers · Fractions · Graphs",
     generalLabel: "Pos/Neg · Graphing · PEMDAS",
     generalPrompt: `Generate exactly 8 math problems covering: positive & negative numbers, graphing on the coordinate plane, order of operations (PEMDAS). Mix all three topics (at least 2 of each).`,
@@ -180,7 +180,7 @@ function ColorizedMath({ text, size = 22, weight = 700 }) {
         return tokens.map((tok, i) => {
           if (tok === "-") return <span key={`${pi}-${i}`} style={{ color: NEG_COLOR, fontWeight: 900 }}>{tok}</span>;
           if (tok === "+") return <span key={`${pi}-${i}`} style={{ color: POS_COLOR, fontWeight: 900 }}>{tok}</span>;
-          if (tok === "×" || tok === "÷") return <span key={`${pi}-${i}`} style={{ color: "#E8FF45", fontWeight: 900 }}>{tok}</span>;
+          if (tok === "×" || tok === "÷") return <span key={`${pi}-${i}`} style={{ color: "#1E3A5F", fontWeight: 900 }}>{tok}</span>;
           if (tok === "(" || tok === ")") return <span key={`${pi}-${i}`} style={{ color: "#c084fc", fontWeight: 900 }}>{tok}</span>;
           return <span key={`${pi}-${i}`} style={{ color: NEU_COLOR }}>{tok}</span>;
         });
@@ -251,7 +251,7 @@ function NumberLine({ nld, submitted, isCorrect }) {
         {/* Start dot */}
         {hasData && (
           <g>
-            <circle cx={toX(nld.start)} cy={H / 2} r={7} fill={nld.start < 0 ? NEG_COLOR : POS_COLOR} stroke="#000" strokeWidth={1.5} opacity={0.85} />
+            <circle cx={toX(nld.start)} cy={H / 2} r={7} fill={nld.start < 0 ? NEG_COLOR : POS_COLOR} stroke="#E2DDD8" strokeWidth={1.5} opacity={0.85} />
             <text x={toX(nld.start)} y={H / 2 - 14} textAnchor="middle" fill={nld.start < 0 ? NEG_COLOR : POS_COLOR} fontSize={10} fontWeight={700} fontFamily="monospace">{nld.start}</text>
           </g>
         )}
@@ -290,7 +290,7 @@ function StepReveal({ steps, submitted }) {
         const done = i < revealed;
         return (
           <div key={i} style={{ background: done ? "#0b1f0b" : "#0f1800", border: `1px solid ${done ? "#1a4a1a" : "#2a3a00"}`, borderRadius: 8, padding: "12px 16px", marginBottom: 8, animation: "fade-in .25s ease" }}>
-            <div style={{ fontSize: 11, color: done ? "#4ade8088" : "#E8FF4588", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>
+            <div style={{ fontSize: 11, color: done ? "#16a34a88" : "#1E3A5F88", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>
               {done ? "✓ Done" : `Step ${i + 1}`}
             </div>
             <div style={{ marginBottom: 6 }}>
@@ -303,7 +303,7 @@ function StepReveal({ steps, submitted }) {
       })}
       {!submitted && !all && (
         <button onClick={() => setRevealed((r) => r + 1)}
-          style={{ width: "100%", padding: "11px", background: "#0f1800", border: "1.5px solid #2a3a00", borderRadius: 8, color: "#E8FF45", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 4 }}>
+          style={{ width: "100%", padding: "11px", background: "#EEF3FA", border: "1.5px solid #1E3A5F33", borderRadius: 8, color: "#1E3A5F", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 4 }}>
           Next Step →
         </button>
       )}
@@ -313,7 +313,7 @@ function StepReveal({ steps, submitted }) {
 
 // ─── Coord Grid ───────────────────────────────────────────────────────────────
 // Supports both single point (legacy) and multi-point labeled mode
-const POINT_COLORS = ["#E8FF45", "#c084fc", "#60a5fa", "#fb923c"]; // A=yellow, B=purple, C=blue, D=orange
+const POINT_COLORS = ["#1E3A5F", "#c084fc", "#60a5fa", "#fb923c"]; // A=navy, B=purple, C=blue, D=orange
 
 function CoordGrid({ point, graphPoints, submitted, correct }) {
   const size = 260, cx = size / 2, step = size / 10, toPx = (v) => cx + v * step;
@@ -346,7 +346,7 @@ function CoordGrid({ point, graphPoints, submitted, correct }) {
         const px = toPx(pt.x), py = toPx(-pt.y);
         return (
           <g key={idx}>
-            <circle cx={px} cy={py} r={9} fill={color} stroke="#000" strokeWidth={2}/>
+            <circle cx={px} cy={py} r={9} fill={color} stroke="#fff" strokeWidth={2}/>
             {pt.label && (
               <>
                 {/* White halo behind label for readability */}
@@ -429,10 +429,10 @@ function InsightCard({ insight }) {
 function TrendBadge({ trend }) {
   if (trend === "improving") return <span style={{ fontSize:11, fontWeight:800, color:POS_COLOR, background:"#0b1f0b", border:`1px solid ${POS_COLOR}44`, borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>↑ IMPROVING</span>;
   if (trend === "needs-work") return <span style={{ fontSize:11, fontWeight:800, color:NEG_COLOR, background:"#1f0b0b", border:`1px solid ${NEG_COLOR}44`, borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>↓ NEEDS WORK</span>;
-  return <span style={{ fontSize:11, fontWeight:800, color:"#555", background:"#111", border:"1px solid #222", borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>→ STEADY</span>;
+  return <span style={{ fontSize:11, fontWeight:800, color:"#6A6560", background:"#F0EEE9", border:"1px solid #E2DDD8", borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>→ STEADY</span>;
 }
 function MiniBar({ value }) {
-  const color = value >= 70 ? POS_COLOR : value >= 40 ? "#E8FF45" : NEG_COLOR;
+  const color = value >= 70 ? POS_COLOR : value >= 40 ? "#D97706" : NEG_COLOR;
   return (
     <div style={{ background:"#141414", borderRadius:3, height:6, overflow:"hidden", flex:1 }}>
       <div style={{ height:"100%", width:`${value}%`, background:color, borderRadius:3, transition:"width .5s ease" }}/>
@@ -821,10 +821,10 @@ function ReferenceCard({ open, onClose }) {
   return (
     <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"#000000cc", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center", padding:"0 12px 12px" }}
       onClick={onClose}>
-      <div style={{ background:"#111", border:"1px solid #2a2a2a", borderRadius:16, padding:"24px 20px", maxWidth:520, width:"100%", animation:"fade-in .2s ease" }}
+      <div style={{ background:"#FFFFFF", border:"1px solid #E2DDD8", borderRadius:16, padding:"24px 20px", maxWidth:520, width:"100%", animation:"fade-in .2s ease" }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <div style={{ fontSize:13, fontWeight:800, color:"#E8FF45", letterSpacing:2, textTransform:"uppercase" }}>Quick Reference</div>
+          <div style={{ fontSize:13, fontWeight:800, color:"#1E3A5F", letterSpacing:2, textTransform:"uppercase" }}>Quick Reference</div>
           <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#444", fontSize:20, cursor:"pointer" }}>✕</button>
         </div>
 
@@ -857,8 +857,8 @@ function ReferenceCard({ open, onClose }) {
             {[
               {l:"P", name:"Parentheses", color:"#c084fc"},
               {l:"E", name:"Exponents", color:"#60a5fa"},
-              {l:"M", name:"Multiply", color:"#E8FF45"},
-              {l:"D", name:"Divide", color:"#E8FF45"},
+              {l:"M", name:"Multiply", color:"#1E3A5F"},
+              {l:"D", name:"Divide", color:"#1E3A5F"},
               {l:"A", name:"Add", color:"#4ade80"},
               {l:"S", name:"Subtract", color:"#ff6b6b"},
             ].map(({l,name,color},i,arr) => (
@@ -904,6 +904,26 @@ function ReferenceCard({ open, onClose }) {
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
+const BrainWizLogo = ({ size = 48 }) => (
+  <svg width={size} height={size * 1.1} viewBox="0 0 100 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Wizard hat */}
+    <ellipse cx="50" cy="58" rx="30" ry="5" stroke="#1E3A5F" strokeWidth="3.5" fill="#E8F0F8" strokeLinecap="round"/>
+    <path d="M50 10 L30 58 Q50 54 70 58 Z" fill="#E8F0F8" stroke="#1E3A5F" strokeWidth="3.5" strokeLinejoin="round"/>
+    {/* Brain lobes hanging below brim */}
+    <path d="M36 62 Q28 70 32 78 Q36 86 42 82 Q46 88 50 84 Q54 88 58 82 Q64 86 68 78 Q72 70 64 62" stroke="#1E3A5F" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    {/* Brain center line */}
+    <line x1="50" y1="63" x2="50" y2="83" stroke="#1E3A5F" strokeWidth="2.5" strokeLinecap="round"/>
+    {/* Brain bumps left */}
+    <path d="M36 68 Q32 64 36 62" stroke="#1E3A5F" strokeWidth="2" fill="none" strokeLinecap="round"/>
+    <path d="M36 76 Q30 72 34 68" stroke="#1E3A5F" strokeWidth="2" fill="none" strokeLinecap="round"/>
+    {/* Brain bumps right */}
+    <path d="M64 68 Q68 64 64 62" stroke="#1E3A5F" strokeWidth="2" fill="none" strokeLinecap="round"/>
+    <path d="M64 76 Q70 72 66 68" stroke="#1E3A5F" strokeWidth="2" fill="none" strokeLinecap="round"/>
+    {/* Green sparkle top right of hat */}
+    <path d="M68 12 L70 18 L76 16 L70 22 L72 28 L66 22 L60 26 L64 20 L58 16 L64 14 Z" fill="#2BC48A" opacity="0.9"/>
+  </svg>
+);
+
 export default function App() {
   const [screen, setScreen] = useState("login");
   const [currentUser, setCurrentUser] = useState(null);  // {username, displayName}
@@ -1390,7 +1410,7 @@ ${SCHEMA_INSTRUCTIONS}`;
         {screen === "pending" && (
           <div style={{ ...S.card, animation:"fade-in .3s ease", maxWidth:400, textAlign:"center" }}>
             <div style={{ fontSize:48, marginBottom:12 }}>⏳</div>
-            <div style={S.logo}>Study Hall</div>
+            <div style={S.logo}>BrainWiz</div>
             <div style={S.h1}>ALMOST THERE</div>
             <div style={{ fontSize:15, color:"#555", lineHeight:1.8, marginBottom:28, marginTop:8 }}>
               Your account has been created and is waiting for approval.<br/>
@@ -1406,16 +1426,16 @@ ${SCHEMA_INSTRUCTIONS}`;
         {screen === "login" && (
           <div style={{ ...S.card, animation:"fade-in .3s ease", maxWidth:400 }}>
             <div style={{ textAlign:"center", marginBottom:8 }}>
-              <div style={{ fontSize:40, marginBottom:4 }}>🎓</div>
-              <div style={S.logo}>Study Hall</div>
+              <div style={{ marginBottom:8 }}><BrainWizLogo size={56} /></div>
+              <div style={S.logo}>BrainWiz</div>
               <div style={S.h1}>SIGN IN</div>
             </div>
 
             {/* Mode toggle */}
-            <div style={{ display:"flex", background:"#111", borderRadius:8, padding:3, marginBottom:24 }}>
+            <div style={{ display:"flex", background:"#F0EEE9", borderRadius:8, padding:3, marginBottom:24 }}>
               {["login","register"].map(mode => (
                 <button key={mode} onClick={() => { setLoginMode(mode); setLoginError(""); }}
-                  style={{ flex:1, padding:"9px", background:loginMode===mode?"#E8FF45":"transparent", border:"none", borderRadius:6, color:loginMode===mode?"#000":"#444", fontSize:12, fontWeight:800, cursor:"pointer", letterSpacing:1, textTransform:"uppercase", transition:"all .15s" }}>
+                  style={{ flex:1, padding:"9px", background:loginMode===mode?"#1E3A5F":"transparent", border:"none", borderRadius:6, color:loginMode===mode?"#FFFFFF":"#9A9490", fontSize:12, fontWeight:800, cursor:"pointer", letterSpacing:1, textTransform:"uppercase", transition:"all .15s" }}>
                   {mode === "login" ? "Sign In" : "New Student"}
                 </button>
               ))}
@@ -1426,7 +1446,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                 <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:6, fontWeight:700 }}>DISPLAY NAME</div>
                 <input value={loginDisplayName} onChange={e=>setLoginDisplayName(e.target.value)}
                   placeholder="e.g. Emma"
-                  style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"12px 14px", color:"#fff", fontSize:15, fontFamily:"inherit", outline:"none" }}
+                  style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:8, padding:"12px 14px", color:"#1A1714", fontSize:15, fontFamily:"inherit", outline:"none" }}
                   onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
               </div>
             )}
@@ -1436,7 +1456,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               <input value={loginUsername} onChange={e=>setLoginUsername(e.target.value)}
                 placeholder="your username"
                 autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"12px 14px", color:"#fff", fontSize:15, fontFamily:"inherit", outline:"none" }}
+                style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:8, padding:"12px 14px", color:"#1A1714", fontSize:15, fontFamily:"inherit", outline:"none" }}
                 onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
             </div>
 
@@ -1444,19 +1464,19 @@ ${SCHEMA_INSTRUCTIONS}`;
               <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:6, fontWeight:700 }}>PASSWORD</div>
               <input type="password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)}
                 placeholder="••••••"
-                style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"12px 14px", color:"#fff", fontSize:15, fontFamily:"inherit", outline:"none" }}
+                style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:8, padding:"12px 14px", color:"#1A1714", fontSize:15, fontFamily:"inherit", outline:"none" }}
                 onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
             </div>
 
             {loginError && <div style={{ background:"#1f0808", border:"1px solid #4a1414", borderRadius:7, padding:"10px 14px", marginBottom:14, color:"#f87171", fontSize:13 }}>{loginError}</div>}
 
             <button onClick={handleLogin} disabled={loginLoading}
-              style={{ width:"100%", padding:"15px", background:loginLoading?"#333":"#E8FF45", border:"none", borderRadius:8, color:loginLoading?"#555":"#000", fontSize:16, fontWeight:800, cursor:loginLoading?"default":"pointer", marginBottom:10 }}>
+              style={{ width:"100%", padding:"15px", background:loginLoading?"#E2DDD8":"#1E3A5F", border:"none", borderRadius:8, color:loginLoading?"#9A9490":"#FFFFFF", fontSize:16, fontWeight:800, cursor:loginLoading?"default":"pointer", marginBottom:10 }}>
               {loginLoading ? "…" : loginMode === "login" ? "Sign In →" : "Create Account →"}
             </button>
 
             <div style={{ textAlign:"center", fontSize:11, color:"#2a2a2a", marginTop:8 }}>
-              Passwords are stored locally on this device
+              Your data is stored securely in the cloud
             </div>
           </div>
         )}
@@ -1472,13 +1492,13 @@ ${SCHEMA_INSTRUCTIONS}`;
               </div>
               <div style={{ textAlign:"right" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:"#E8FF45" }}>{currentUser?.displayName}</div>
-                  {currentUser?.isAdmin && <span style={{ fontSize:9, background:"#E8FF4520", border:"1px solid #E8FF4544", borderRadius:4, padding:"2px 6px", color:"#E8FF45", fontWeight:800, letterSpacing:1 }}>ADMIN</span>}
+                  <div style={{ fontSize:13, fontWeight:800, color:"#1E3A5F" }}>{currentUser?.displayName}</div>
+                  {currentUser?.isAdmin && <span style={{ fontSize:9, background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:4, padding:"2px 6px", color:"#1E3A5F", fontWeight:800, letterSpacing:1 }}>ADMIN</span>}
                 </div>
                 <div style={{ display:"flex", gap:6 }}>
                   {currentUser?.isAdmin && (
                     <button onClick={() => { setScreen("admin"); loadAdminUsers(); }}
-                      style={{ background:"#E8FF4515", border:"1px solid #E8FF4444", borderRadius:6, color:"#E8FF45", fontSize:11, padding:"4px 10px", cursor:"pointer", letterSpacing:1, fontWeight:800 }}>
+                      style={{ background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:6, color:"#1E3A5F", fontSize:11, padding:"4px 10px", cursor:"pointer", letterSpacing:1, fontWeight:800 }}>
                       ⚙ ADMIN
                     </button>
                   )}
@@ -1531,16 +1551,16 @@ ${SCHEMA_INSTRUCTIONS}`;
             <div style={S.h1}>USER MANAGEMENT</div>
 
             {/* Tab bar */}
-            <div style={{ display:"flex", background:"#111", borderRadius:8, padding:3, marginBottom:20 }}>
+            <div style={{ display:"flex", background:"#F0EEE9", borderRadius:8, padding:3, marginBottom:20 }}>
               {[["pending","⏳ Pending"],["all","👥 All Users"],["add","➕ Add User"]].map(([tab, label]) => (
                 <button key={tab} onClick={() => setAdminTab(tab)}
-                  style={{ flex:1, padding:"8px 4px", background:adminTab===tab?"#E8FF45":"transparent", border:"none", borderRadius:6, color:adminTab===tab?"#000":"#444", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1, transition:"all .15s" }}>
+                  style={{ flex:1, padding:"8px 4px", background:adminTab===tab?"#1E3A5F":"transparent", border:"none", borderRadius:6, color:adminTab===tab?"#FFFFFF":"#9A9490", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1, transition:"all .15s" }}>
                   {label}
                 </button>
               ))}
             </div>
 
-            {adminMsg && <div style={{ background:"#0f1400", border:"1px solid #2a3000", borderRadius:7, padding:"10px 14px", marginBottom:14, color:"#E8FF45", fontSize:13, textAlign:"center" }}>{adminMsg}</div>}
+            {adminMsg && <div style={{ background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:7, padding:"10px 14px", marginBottom:14, color:"#1E3A5F", fontSize:13, textAlign:"center" }}>{adminMsg}</div>}
 
             {adminLoading && <div style={{ textAlign:"center", padding:24, color:"#444" }}>Loading…</div>}
 
@@ -1550,7 +1570,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                 {adminUsers.filter(u => !u.is_approved && !u.is_admin).length === 0
                   ? <div style={{ textAlign:"center", padding:24, color:"#333", fontSize:14 }}>No pending users 🎉</div>
                   : adminUsers.filter(u => !u.is_approved && !u.is_admin).map(u => (
-                    <div key={u.username} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid #141414" }}>
+                    <div key={u.username} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid #F0EEE9" }}>
                       <div>
                         <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>{u.display_name}</div>
                         <div style={{ fontSize:11, color:"#444", fontFamily:"monospace" }}>@{u.username}</div>
@@ -1571,11 +1591,11 @@ ${SCHEMA_INSTRUCTIONS}`;
             {adminTab === "all" && !adminLoading && (
               <div>
                 {adminUsers.map(u => (
-                  <div key={u.username} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid #141414" }}>
+                  <div key={u.username} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid #F0EEE9" }}>
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                         <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>{u.display_name}</div>
-                        {u.is_admin && <span style={{ fontSize:9, background:"#E8FF4520", border:"1px solid #E8FF4444", borderRadius:4, padding:"2px 6px", color:"#E8FF45", fontWeight:800 }}>ADMIN</span>}
+                        {u.is_admin && <span style={{ fontSize:9, background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:4, padding:"2px 6px", color:"#1E3A5F", fontWeight:800 }}>ADMIN</span>}
                         {!u.is_approved && !u.is_admin && <span style={{ fontSize:9, background:"#ff6b6b20", border:"1px solid #ff6b6b44", borderRadius:4, padding:"2px 6px", color:"#ff6b6b", fontWeight:800 }}>PENDING</span>}
                       </div>
                       <div style={{ fontSize:11, color:"#444", fontFamily:"monospace" }}>@{u.username}</div>
@@ -1584,7 +1604,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                       <div style={{ display:"flex", gap:8 }}>
                         {!u.is_approved
                           ? <button onClick={() => handleApproveUser(u.username, true)} style={{ background:"#0b1f0b", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Approve</button>
-                          : <button onClick={() => handleApproveUser(u.username, false)} style={{ background:"#1a1400", border:"1px solid #E8FF4433", borderRadius:6, color:"#E8FF45", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Revoke</button>
+                          : <button onClick={() => handleApproveUser(u.username, false)} style={{ background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:6, color:"#1E3A5F", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Revoke</button>
                         }
                         <button onClick={() => handleDeleteUser(u.username)} style={{ background:"#1f0b0b", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Delete</button>
                       </div>
@@ -1600,24 +1620,24 @@ ${SCHEMA_INSTRUCTIONS}`;
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:5, fontWeight:700 }}>DISPLAY NAME</div>
                   <input value={adminNewDisplay} onChange={e=>setAdminNewDisplay(e.target.value)} placeholder="e.g. Emma"
-                    style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"10px 14px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+                    style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:8, padding:"10px 14px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
                 </div>
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:5, fontWeight:700 }}>USERNAME</div>
                   <input value={adminNewUsername} onChange={e=>setAdminNewUsername(e.target.value)} placeholder="username" autoCapitalize="none"
-                    style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"10px 14px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+                    style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:8, padding:"10px 14px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
                 </div>
                 <div style={{ marginBottom:16 }}>
                   <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:5, fontWeight:700 }}>PASSWORD</div>
                   <input value={adminNewPassword} onChange={e=>setAdminNewPassword(e.target.value)} placeholder="••••••"
-                    style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"10px 14px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+                    style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:8, padding:"10px 14px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
                   <input type="checkbox" checked={adminNewIsAdmin} onChange={e=>setAdminNewIsAdmin(e.target.checked)} id="isAdminChk" style={{ width:16, height:16, cursor:"pointer" }} />
                   <label htmlFor="isAdminChk" style={{ fontSize:13, color:"#666", cursor:"pointer" }}>Make this user an admin</label>
                 </div>
                 <button onClick={handleAdminAddUser}
-                  style={{ width:"100%", padding:"14px", background:"#E8FF45", border:"none", borderRadius:8, color:"#000", fontSize:15, fontWeight:800, cursor:"pointer" }}>
+                  style={{ width:"100%", padding:"14px", background:"#1E3A5F", border:"none", borderRadius:8, color:"#FFFFFF", fontSize:15, fontWeight:800, cursor:"pointer" }}>
                   Create & Approve User →
                 </button>
               </div>
@@ -1641,11 +1661,11 @@ ${SCHEMA_INSTRUCTIONS}`;
 
                 {/* General */}
                 <button onClick={() => { setHwTopic({ _isGeneral:true, topicName:"General Practice", description:subject?.generalLabel||"Mixed topics" }); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
-                  style={{ background:"#0f0f0f", border:`1.5px solid ${subject?.border||"#2a2a2a"}`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=subject?.accent+"66"||"#E8FF4566";e.currentTarget.style.background=subject?.bg||"#111";}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=subject?.border||"#2a2a2a";e.currentTarget.style.background="#0f0f0f";}}>
+                  style={{ background:"#FFFFFF", border:`1.5px solid ${subject?.border||"#E2DDD8"}`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=subject?.accent+"66"||"#1E3A5F66";e.currentTarget.style.background=subject?.bg||"#F8F6F3";}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=subject?.border||"#2a2a2a";e.currentTarget.style.background="#FFFFFF";}}>
                   <div style={{ fontSize:18, marginBottom:5 }}>{subject?.emoji||"📐"}</div>
-                  <div style={{ fontSize:13, fontWeight:800, color:subject?.accent||"#E8FF45", lineHeight:1.2 }}>General</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:subject?.accent||"#1E3A5F", lineHeight:1.2 }}>General</div>
                   <div style={{ fontSize:10, color:"#3a3a3a", marginTop:3, lineHeight:1.4 }}>{subject?.generalLabel||"Mixed topics"}</div>
                 </button>
 
@@ -1671,9 +1691,9 @@ ${SCHEMA_INSTRUCTIONS}`;
                   return (
                     <button key={t.topicKey}
                       onClick={() => { setHwTopic(t); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
-                      style={{ background:"#0f0f0f", border:`1.5px solid ${color}33`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
+                      style={{ background:"#FFFFFF", border:`1.5px solid ${color}33`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=color+"88";e.currentTarget.style.background=color+"0a";}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"33";e.currentTarget.style.background="#0f0f0f";}}>
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"33";e.currentTarget.style.background="#FFFFFF";}}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:5 }}>
                         <div style={{ fontSize:18 }}>📚</div>
                         <div style={{ fontSize:9, color:color+"66", fontFamily:"monospace" }}>×{t.sessionCount}</div>
@@ -1696,10 +1716,10 @@ ${SCHEMA_INSTRUCTIONS}`;
                 onDragOver={(e)=>{e.preventDefault();setDragging(true);}}
                 onDragLeave={()=>setDragging(false)}
                 onDrop={(e)=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
-                style={{ width:"100%", marginBottom:8, background:dragging?"#E8FF450a":"transparent", border:`2px dashed ${dragging?"#E8FF45":"#2a2a2a"}`, borderRadius:12, padding:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:14, transition:"all .15s" }}>
-                <div style={{ fontSize:24, color:dragging?"#E8FF45":"#2a2a2a", lineHeight:1 }}>+</div>
+                style={{ width:"100%", marginBottom:8, background:dragging?"#EEF3FA":"transparent", border:`2px dashed ${dragging?"#1E3A5F":"#D0CCC8"}`, borderRadius:12, padding:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:14, transition:"all .15s" }}>
+                <div style={{ fontSize:24, color:dragging?"#1E3A5F":"#D0CCC8", lineHeight:1 }}>+</div>
                 <div style={{ textAlign:"left" }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:dragging?"#E8FF45":"#2a2a2a", letterSpacing:1 }}>UPLOAD HOMEWORK</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:dragging?"#1E3A5F":"#9A9490", letterSpacing:1 }}>UPLOAD HOMEWORK</div>
                   <div style={{ fontSize:11, color:dragging?"#E8FF4488":"#222", marginTop:2 }}>JPG, PNG, PDF, HEIC</div>
                 </div>
               </button>
@@ -1724,14 +1744,14 @@ ${SCHEMA_INSTRUCTIONS}`;
                     <div style={{ background:"#0a0515", padding:"14px 16px", borderTop:"1px solid #1a0a30", animation:"fade-in .15s ease" }}>
                       <input value={bookTitle} onChange={e=>setBookTitle(e.target.value)}
                         placeholder="Book title (e.g. The Hobbit)"
-                        style={{ width:"100%", background:"#111", border:"1.5px solid #2a1a50", borderRadius:8, padding:"10px 12px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:8, boxSizing:"border-box" }}
+                        style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:8, boxSizing:"border-box" }}
                         onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
                       <input value={bookAuthor} onChange={e=>setBookAuthor(e.target.value)}
                         placeholder="Author (optional)"
-                        style={{ width:"100%", background:"#111", border:"1.5px solid #2a1a50", borderRadius:8, padding:"10px 12px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
+                        style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
                         onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
                       <button onClick={handleTextTopicSubmit} disabled={!bookTitle.trim()}
-                        style={{ width:"100%", padding:"10px", background:bookTitle.trim()?"#a78bfa":"#1a0a30", border:"none", borderRadius:8, color:bookTitle.trim()?"#000":"#333", fontSize:13, fontWeight:800, cursor:bookTitle.trim()?"pointer":"default" }}>
+                        style={{ width:"100%", padding:"10px", background:bookTitle.trim()?"#a78bfa":"#F0EEE9", border:"none", borderRadius:8, color:bookTitle.trim()?"#fff":"#9A9490", fontSize:13, fontWeight:800, cursor:bookTitle.trim()?"pointer":"default" }}>
                         Study This Book →
                       </button>
                     </div>
@@ -1759,10 +1779,10 @@ ${SCHEMA_INSTRUCTIONS}`;
                     <div style={{ background:"#0a0a0a", padding:"14px 16px", borderTop:`1px solid ${subject.border}`, animation:"fade-in .15s ease" }}>
                       <input value={textTopicInput} onChange={e=>setTextTopicInput(e.target.value)}
                         placeholder={`e.g. "${subject.id === "religion" ? "The Seven Sacraments" : subject.id === "social_studies" ? "Ancient Rome" : "Photosynthesis"}"`}
-                        style={{ width:"100%", background:"#111", border:`1.5px solid ${subject.border}`, borderRadius:8, padding:"10px 12px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
+                        style={{ width:"100%", background:"#F8F6F3", border:`1.5px solid ${subject.border}`, borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
                         onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
                       <button onClick={handleTextTopicSubmit} disabled={!textTopicInput.trim()}
-                        style={{ width:"100%", padding:"10px", background:textTopicInput.trim()?subject.accent:"#1a1a1a", border:"none", borderRadius:8, color:textTopicInput.trim()?"#000":"#333", fontSize:13, fontWeight:800, cursor:textTopicInput.trim()?"pointer":"default" }}>
+                        style={{ width:"100%", padding:"10px", background:textTopicInput.trim()?subject.accent:"#F0EEE9", border:"none", borderRadius:8, color:textTopicInput.trim()?"#fff":"#9A9490", fontSize:13, fontWeight:800, cursor:textTopicInput.trim()?"pointer":"default" }}>
                         Study This Theme →
                       </button>
                     </div>
@@ -1775,7 +1795,7 @@ ${SCHEMA_INSTRUCTIONS}`;
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display:"none" }}
               onChange={(e)=>{if(e.target.files[0])handleFile(e.target.files[0]);}} />
 
-            <div style={{ borderTop:"1px solid #141414", paddingTop:14, display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ borderTop:"1px solid #E2DDD8", paddingTop:14, display:"flex", flexDirection:"column", gap:8 }}>
               {weakSpotsCount > 0 && (
                 <button className="ghost-hover" style={{ ...S.ghostBtn, borderColor:"#3a1a00", color:"#7a3a00" }}
                   onClick={handleWeakSpots}>
@@ -1822,9 +1842,9 @@ ${SCHEMA_INSTRUCTIONS}`;
                   const isMix = hwTopic?._isMix;
                   const isBook = hwTopic?._isBook;
                   const isTextTopic = hwTopic?._isTextTopic;
-                  const accent = subject?.accent || "#E8FF45";
-                  const accentDim = subject?.accentDim || "#3a4a00";
-                  const bg = subject?.bg || "#0d1800";
+                  const accent = subject?.accent || "#1E3A5F";
+                  const accentDim = subject?.accentDim || "#B8C8D8";
+                  const bg = subject?.bg || "#EEF3FA";
                   const border = accent + "30";
                   const modeLabel = isGeneral ? "General Practice" : isMix ? "Mixed Topics" : isBook ? "Book Study" : isTextTopic ? "Custom Topic" : "Topic Detected";
                   const modeTitle = isGeneral ? (subject?.name || "General") : isMix ? "🔀 Mix" : hwTopic?.topicName || "Homework";
@@ -1885,7 +1905,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     Let's Practice →
                   </button>
                   <button className="ghost-hover"
-                    style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #1f1f1f", color:"#444" }}
+                    style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }}
                     onClick={() => { setScreen("upload"); setHwFile(null); setHwTopic(null); }}>
                     Cancel
                   </button>
@@ -1899,7 +1919,7 @@ ${SCHEMA_INSTRUCTIONS}`;
         {screen === "loading" && (
           <div style={{ ...S.card, textAlign:"center" }}>
             <div style={{ fontSize:38, display:"inline-block", animation:"spin 1.2s linear infinite", marginBottom:18 }}>⚙</div>
-            <div style={{ fontSize:20, fontWeight:800, color:"#E8FF45", marginBottom:8 }}>Building your session…</div>
+            <div style={{ fontSize:20, fontWeight:800, color:"#1E3A5F", marginBottom:8 }}>Building your session…</div>
             <div style={{ fontSize:13, color:"#333", letterSpacing:1 }}>Generating problems</div>
           </div>
         )}
@@ -2064,7 +2084,7 @@ ${SCHEMA_INSTRUCTIONS}`;
             {!insightsLoading&&insights&&insights.length===0&&(<div style={{ color:POS_COLOR, fontSize:18, fontWeight:700, textAlign:"center", padding:"32px 0" }}>🏆 Perfect session — no weak spots!</div>)}
             <div style={{ ...S.btnRow, marginTop:24 }}>
               <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Practice Again</button>
-              <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #1f1f1f", color:"#444" }} onClick={()=>{clearTimer();setScreen("subjects");}}>Home</button>
+              <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }} onClick={()=>{clearTimer();setScreen("subjects");}}>Home</button>
             </div>
           </div>
         )}
@@ -2098,7 +2118,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                         <MiniBar value={avg}/>
-                        <span style={{ fontFamily:"monospace", fontSize:11, color:avg>=70?POS_COLOR:avg>=40?"#E8FF45":NEG_COLOR, minWidth:34, textAlign:"right" }}>{avg}%</span>
+                        <span style={{ fontFamily:"monospace", fontSize:11, color:avg>=70?POS_COLOR:avg>=40?"#D97706":NEG_COLOR, minWidth:34, textAlign:"right" }}>{avg}%</span>
                       </div>
                     </div>
                   ))}
@@ -2113,7 +2133,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                         onClick={()=>setExpandedSession(isEx?null:s.id)}>
                         <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                           <span style={{ fontFamily:"monospace", fontSize:11, color:"#333", minWidth:155 }}>{fmtDate(s.date)}</span>
-                          <span style={{ fontFamily:"monospace", fontSize:14, fontWeight:800, color:sp>=70?POS_COLOR:sp>=40?"#E8FF45":NEG_COLOR }}>{s.correct}/{s.total}</span>
+                          <span style={{ fontFamily:"monospace", fontSize:14, fontWeight:800, color:sp>=70?POS_COLOR:sp>=40?"#D97706":NEG_COLOR }}>{s.correct}/{s.total}</span>
                           {s.timeSpent>0&&<span style={{ fontSize:11, color:"#2a2a2a", fontFamily:"monospace" }}>⏱ {fmt(s.timeSpent)}</span>}
                           <span style={{ fontSize:10, color:"#2a2a2a", letterSpacing:1, textTransform:"uppercase" }}>{DIFFICULTY_LABELS[s.difficulty]}</span>
                           <span style={{ marginLeft:"auto", fontSize:12, color:"#2a2a2a" }}>{isEx?"▲":"▼"}</span>
@@ -2129,13 +2149,13 @@ ${SCHEMA_INSTRUCTIONS}`;
                             return (<div key={topic} style={{ marginBottom:8 }}>
                               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                                 <span style={S.pill(topic)}>{topicLabel(topic)}</span>
-                                <span style={{ fontFamily:"monospace", fontSize:12, color:p>=70?POS_COLOR:p>=40?"#E8FF45":NEG_COLOR }}>{ok}/{rows.length} ({p}%)</span>
+                                <span style={{ fontFamily:"monospace", fontSize:12, color:p>=70?POS_COLOR:p>=40?"#D97706":NEG_COLOR }}>{ok}/{rows.length} ({p}%)</span>
                               </div>
                               <MiniBar value={p}/>
                             </div>);
                           })}
                           {s.log.filter((l)=>!l.ok).length>0&&(
-                            <div style={{ marginTop:12, borderTop:"1px solid #141414", paddingTop:12 }}>
+                            <div style={{ marginTop:12, borderTop:"1px solid #F0EEE9", paddingTop:12 }}>
                               <div style={{ fontSize:10, color:"#2a2a2a", letterSpacing:3, textTransform:"uppercase", marginBottom:8 }}>Missed</div>
                               {s.log.filter((l)=>!l.ok).map((l,i)=>(
                                 <div key={i} style={{ marginBottom:6, fontSize:13, lineHeight:1.7 }}>
@@ -2157,14 +2177,14 @@ ${SCHEMA_INSTRUCTIONS}`;
                     : <div style={{ display:"flex", gap:8, justifyContent:"center", alignItems:"center" }}>
                         <span style={{ fontSize:12, color:"#555" }}>Are you sure?</span>
                         <button style={{ background:"#1f0808", border:`1px solid ${NEG_COLOR}44`, borderRadius:6, color:NEG_COLOR, fontSize:12, padding:"5px 12px", cursor:"pointer", fontWeight:700 }} onClick={async()=>{await clearSessions();setSessions([]);setConfirmClear(false);}}>Yes, clear</button>
-                        <button style={{ background:"transparent", border:"1px solid #1f1f1f", borderRadius:6, color:"#444", fontSize:12, padding:"5px 12px", cursor:"pointer" }} onClick={()=>setConfirmClear(false)}>Cancel</button>
+                        <button style={{ background:"transparent", border:"1px solid #E2DDD8", borderRadius:6, color:"#444", fontSize:12, padding:"5px 12px", cursor:"pointer" }} onClick={()=>setConfirmClear(false)}>Cancel</button>
                       </div>}
                 </div>
               </>);
             })()}
             <div style={{ ...S.btnRow, marginTop:24 }}>
               <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Start Session</button>
-              <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #1f1f1f", color:"#444" }} onClick={()=>setScreen("upload")}>Home</button>
+              <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }} onClick={()=>setScreen("upload")}>Home</button>
             </div>
           </div>
         )}
