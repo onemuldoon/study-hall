@@ -1511,9 +1511,10 @@ Use sentence diagrams for questions about parts of speech, subject/predicate, mo
 
 SOCIAL STUDIES VISUALS:
 "visual": {"type":"timeline","title":"American Revolution","events":[{"year":"1775","label":"War begins"},{"year":"1776","label":"Declaration"},{"year":"1781","label":"Yorktown"},{"year":"1783","label":"Treaty of Paris"}],"highlightYear":"1776"}
-Use timelines for questions about historical sequence, cause and effect, dates.`;`
+Use timelines for questions about historical sequence, cause and effect, dates.
 
-RULES: Only include "visual" when it adds genuine clarity. Omit for purely factual recall questions.`;
+RULES: Only include a "visual" field when it genuinely aids comprehension. Omit for pure text recall questions.
+Each question is independent — only include "visual" if THAT specific question benefits from it.`
 
 // Quick topic detection — lightweight call, returns {topicKey, topicName, description}
 async function detectHomeworkTopic(base64, mediaType) {
