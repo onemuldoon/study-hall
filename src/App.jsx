@@ -44,6 +44,7 @@ const SUBJECTS = [
     bg: "#001a10",
     border: "#00402a",
     tagline: "Biology · Earth Science · Physics",
+    supportsTextTopic: true,
     generalLabel: "Life · Earth · Physical Science",
     generalPrompt: `Generate exactly 8 science questions for a 6th grader covering: life science (cells, ecosystems, adaptations), earth science (rocks, weather, solar system), and physical science (forces, energy, matter). Mix all three areas.`,
     insightContext: "6th grade science",
@@ -58,6 +59,7 @@ const SUBJECTS = [
     bg: "#150800",
     border: "#3a1800",
     tagline: "History · Geography · Civics",
+    supportsTextTopic: true,
     generalLabel: "History · Geography · Civics",
     generalPrompt: `Generate exactly 8 social studies questions for a 6th grader covering: world history (ancient civilizations, key events), geography (continents, countries, landforms), and civics (government, rights, citizenship). Mix all three areas.`,
     insightContext: "6th grade social studies",
@@ -104,6 +106,8 @@ const SUBJECTS = [
     generalPrompt: `Generate exactly 8 English literature questions for a 6th grader about "The Silver Chair" by C.S. Lewis (The Chronicles of Narnia). Cover: plot comprehension (key events, chapter sequence, cause and effect), character analysis (Jill, Eustace, Puddleglum, Prince Rilian, the Lady of the Green Kirtle, Aslan), and themes/literary devices (obedience, signs, hope, temptation, symbolism, foreshadowing). Mix all three areas. Keep questions clear and specific to the book.`,
     insightContext: "6th grade English literature — The Silver Chair",
     hasMathVisuals: false,
+    supportsBookInput: true,
+    supportsTextTopic: false,
   },
   {
     id: "religion",
@@ -114,6 +118,7 @@ const SUBJECTS = [
     bg: "#140e00",
     border: "#3a2a00",
     tagline: "Catechism · Faith · Sacraments",
+    supportsTextTopic: true,
     generalLabel: "Creed · Sacraments · Commandments",
     generalPrompt: `Generate exactly 8 religion questions for a Catholic 6th grader based on the Catechism of the Catholic Church. Cover: the Creed and core beliefs (Trinity, Incarnation, Resurrection, the Church), the Sacraments (names, purpose, matter and form of each, especially Baptism, Eucharist, Reconciliation, Confirmation), and the Commandments and moral life (Ten Commandments, Beatitudes, Works of Mercy). Mix all three areas. Keep questions age-appropriate, clear, and faithful to Catholic teaching.`,
     insightContext: "6th grade Catholic religion and Catechism",
@@ -458,10 +463,11 @@ async function registerUser(username, password, displayName, isAdmin = false) {
     password_hash: hashPassword(uname, password),
     display_name: displayName.trim() || username.trim(),
     is_admin: isAdmin,
+    is_approved: isAdmin, // admins auto-approved; regular users need approval
   };
   const { error } = await supabase.from("users").insert(newUser);
   if (error) return { ok: false, error: "Could not create account: " + error.message };
-  return { ok: true, user: { username: uname, displayName: newUser.display_name, isAdmin } };
+  return { ok: true, user: { username: uname, displayName: newUser.display_name, isAdmin }, pendingApproval: !isAdmin };
 }
 
 async function loginUser(username, password) {
@@ -470,6 +476,7 @@ async function loginUser(username, password) {
   const { data: user, error } = await supabase.from("users").select("*").eq("username", uname).maybeSingle();
   if (error || !user) return { ok: false, error: "Username not found" };
   if (user.password_hash !== hashPassword(uname, password)) return { ok: false, error: "Wrong password" };
+  if (!user.is_approved && !user.is_admin) return { ok: false, error: "PENDING_APPROVAL" };
   return { ok: true, user: { username: user.username, displayName: user.display_name, isAdmin: user.is_admin } };
 }
 
@@ -660,6 +667,35 @@ Distribute questions roughly evenly across all topics listed.
 Difficulty: ${diffDesc}.
 Dyslexia rules: SHORT question text, no clutter, unambiguous numbers.
 Use the most specific topic string for each problem (e.g. "${hwTopic.mixTopics[0]?.topicKey}").
+${SCHEMA_INSTRUCTIONS}` });
+  } else if (hwTopic?._isBook) {
+    // ── BOOK MODE: English literature questions about a specific book ─────
+    const diffDesc = [
+      "straightforward comprehension — direct recall, simple plot and character questions",
+      "standard analysis — mix of comprehension and basic literary analysis",
+      "deeper analysis — themes, symbolism, character motivation, literary devices",
+    ][difficulty];
+    blocks.push({ type:"text", text:`You are an English literature tutor for a 6th grader with dyslexia.
+Generate exactly 8 multiple-choice questions about the book: "${hwTopic.bookTitle}"${hwTopic.bookAuthor ? ` by ${hwTopic.bookAuthor}` : ""}.
+Cover a mix of: plot comprehension (key events, sequence, cause and effect), character analysis (motivations, relationships, development), and themes/literary devices (symbolism, foreshadowing, author's message).
+Difficulty: ${diffDesc}.
+Dyslexia rules: SHORT clear question text, unambiguous wording. All questions must be specific to this book.
+Use topic string: "${hwTopic.topicKey}"
+${SCHEMA_INSTRUCTIONS}` });
+  } else if (hwTopic?._isTextTopic) {
+    // ── TEXT TOPIC MODE: user-entered theme for Science/History/Religion ──
+    const diffDesc = [
+      "introductory — basic recall and simple facts",
+      "standard 6th-grade difficulty — mix of recall and understanding",
+      "challenging — application, comparison, deeper understanding",
+    ][difficulty];
+    blocks.push({ type:"text", text:`You are a ${subject?.name || "subject"} tutor for a 6th grader with dyslexia.
+Generate exactly 8 multiple-choice questions specifically about: "${hwTopic.topicName}"
+Subject area: ${subject?.name || "General"}
+Difficulty: ${diffDesc}.
+Dyslexia rules: SHORT clear question text, no clutter, unambiguous wording. Multiple choice only.
+Use topic string: "${hwTopic.topicKey}"
+Mix different aspects and sub-topics within "${hwTopic.topicName}" where appropriate.
 ${SCHEMA_INSTRUCTIONS}` });
   } else if (hwTopic && !base64) {
     // ── TOPIC BANK MODE: no image, use stored topic name/description ──────
@@ -908,6 +944,10 @@ export default function App() {
   const [hwFile, setHwFile] = useState(null);      // {base64, mediaType}
   const [hwTopic, setHwTopic] = useState(null);    // {topicKey, topicName, description}
   const [hwDetecting, setHwDetecting] = useState(false);
+  const [textTopicInput, setTextTopicInput] = useState("");   // theme text input
+  const [bookTitle, setBookTitle] = useState("");             // book title for English
+  const [bookAuthor, setBookAuthor] = useState("");           // book author for English
+  const [showTextInput, setShowTextInput] = useState(false);  // expand text input panel
 
   const [sessions, setSessions] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -926,6 +966,14 @@ export default function App() {
   // Topic bank
   const [topicBank, setTopicBank] = useState([]);
   const [topicDropOpen, setTopicDropOpen] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminTab, setAdminTab] = useState("pending"); // "pending" | "all" | "add"
+  const [adminNewUsername, setAdminNewUsername] = useState("");
+  const [adminNewPassword, setAdminNewPassword] = useState("");
+  const [adminNewDisplay, setAdminNewDisplay] = useState("");
+  const [adminNewIsAdmin, setAdminNewIsAdmin] = useState(false);
+  const [adminMsg, setAdminMsg] = useState("");
 
   const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
   useEffect(() => () => clearTimer(), []);
@@ -1132,12 +1180,85 @@ export default function App() {
       } else {
         result = await loginUser(loginUsername, loginPassword);
       }
-      if (!result.ok) { setLoginError(result.error); return; }
+      if (!result.ok) {
+        if (result.error === "PENDING_APPROVAL") { setScreen("pending"); return; }
+        setLoginError(result.error); return;
+      }
+      if (result.pendingApproval) { setScreen("pending"); return; }
       setCurrentUser(result.user);
       setLoginUsername(""); setLoginPassword(""); setLoginDisplayName(""); setLoginError("");
       setScreen("subjects");
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const loadAdminUsers = async () => {
+    setAdminLoading(true);
+    const { supabase } = await import("./lib/supabase.js");
+    const { data } = await supabase.from("users").select("*").order("created_at", { ascending: false });
+    setAdminUsers(data || []);
+    setAdminLoading(false);
+  };
+
+  const handleApproveUser = async (username, approve) => {
+    const { supabase } = await import("./lib/supabase.js");
+    await supabase.from("users").update({ is_approved: approve }).eq("username", username);
+    setAdminUsers(prev => prev.map(u => u.username === username ? { ...u, is_approved: approve } : u));
+    setAdminMsg(approve ? `✅ ${username} approved` : `❌ ${username} revoked`);
+    setTimeout(() => setAdminMsg(""), 3000);
+  };
+
+  const handleDeleteUser = async (username) => {
+    if (!window.confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+    const { supabase } = await import("./lib/supabase.js");
+    await supabase.from("users").delete().eq("username", username);
+    setAdminUsers(prev => prev.filter(u => u.username !== username));
+    setAdminMsg(`🗑 ${username} deleted`);
+    setTimeout(() => setAdminMsg(""), 3000);
+  };
+
+  const handleAdminAddUser = async () => {
+    if (!adminNewUsername.trim() || !adminNewPassword.trim()) { setAdminMsg("Username and password required"); return; }
+    const result = await registerUser(adminNewUsername, adminNewPassword, adminNewDisplay, adminNewIsAdmin);
+    if (!result.ok) { setAdminMsg("❌ " + result.error); return; }
+    // Auto-approve users added by admin
+    const { supabase } = await import("./lib/supabase.js");
+    await supabase.from("users").update({ is_approved: true }).eq("username", adminNewUsername.trim().toLowerCase());
+    setAdminMsg(`✅ ${adminNewUsername} created and approved`);
+    setAdminNewUsername(""); setAdminNewPassword(""); setAdminNewDisplay(""); setAdminNewIsAdmin(false);
+    loadAdminUsers();
+    setTimeout(() => setAdminMsg(""), 4000);
+  };
+
+  const handleTextTopicSubmit = () => {
+    if (subject?.supportsBookInput) {
+      if (!bookTitle.trim()) return;
+      const topicName = bookTitle.trim();
+      const author = bookAuthor.trim();
+      const topic = {
+        topicKey: topicName.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40),
+        topicName,
+        description: author ? `By ${author}` : "Literature study",
+        _isBook: true,
+        bookTitle: topicName,
+        bookAuthor: author,
+      };
+      setHwTopic(topic); setHwFile(null); setDifficulty(1);
+      setShowTextInput(false); setBookTitle(""); setBookAuthor("");
+      setScreen("confirm");
+    } else if (subject?.supportsTextTopic) {
+      if (!textTopicInput.trim()) return;
+      const topicName = textTopicInput.trim();
+      const topic = {
+        topicKey: topicName.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40),
+        topicName,
+        description: `${subject.name} study: ${topicName}`,
+        _isTextTopic: true,
+      };
+      setHwTopic(topic); setHwFile(null); setDifficulty(1);
+      setShowTextInput(false); setTextTopicInput("");
+      setScreen("confirm");
     }
   };
 
@@ -1264,6 +1385,22 @@ ${SCHEMA_INSTRUCTIONS}`;
       `}</style>
       <div style={S.page}>
 
+        {/* ── PENDING APPROVAL ── */}
+        {screen === "pending" && (
+          <div style={{ ...S.card, animation:"fade-in .3s ease", maxWidth:400, textAlign:"center" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>⏳</div>
+            <div style={S.logo}>Study Hall</div>
+            <div style={S.h1}>ALMOST THERE</div>
+            <div style={{ fontSize:15, color:"#555", lineHeight:1.8, marginBottom:28, marginTop:8 }}>
+              Your account has been created and is waiting for approval.<br/>
+              An admin will activate your account shortly.
+            </div>
+            <button onClick={() => setScreen("login")} style={{ width:"100%", padding:"14px", background:"transparent", border:"1.5px solid #2a2a2a", borderRadius:8, color:"#444", fontSize:14, fontWeight:800, cursor:"pointer" }}>
+              ← Back to Sign In
+            </button>
+          </div>
+        )}
+
         {/* ── LOGIN ── */}
         {screen === "login" && (
           <div style={{ ...S.card, animation:"fade-in .3s ease", maxWidth:400 }}>
@@ -1337,9 +1474,17 @@ ${SCHEMA_INSTRUCTIONS}`;
                   <div style={{ fontSize:13, fontWeight:800, color:"#E8FF45" }}>{currentUser?.displayName}</div>
                   {currentUser?.isAdmin && <span style={{ fontSize:9, background:"#E8FF4520", border:"1px solid #E8FF4544", borderRadius:4, padding:"2px 6px", color:"#E8FF45", fontWeight:800, letterSpacing:1 }}>ADMIN</span>}
                 </div>
-                <button onClick={handleLogout} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:6, color:"#444", fontSize:11, padding:"4px 10px", cursor:"pointer", letterSpacing:1 }}>
-                  LOG OUT
-                </button>
+                <div style={{ display:"flex", gap:6 }}>
+                  {currentUser?.isAdmin && (
+                    <button onClick={() => { setScreen("admin"); loadAdminUsers(); }}
+                      style={{ background:"#E8FF4515", border:"1px solid #E8FF4444", borderRadius:6, color:"#E8FF45", fontSize:11, padding:"4px 10px", cursor:"pointer", letterSpacing:1, fontWeight:800 }}>
+                      ⚙ ADMIN
+                    </button>
+                  )}
+                  <button onClick={handleLogout} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:6, color:"#444", fontSize:11, padding:"4px 10px", cursor:"pointer", letterSpacing:1 }}>
+                    LOG OUT
+                  </button>
+                </div>
               </div>
             </div>
             <div style={{ ...S.sub, marginBottom:20 }}>What are we practicing today?</div>
@@ -1353,6 +1498,10 @@ ${SCHEMA_INSTRUCTIONS}`;
                     setError(null);
                     setHwFile(null);
                     setHwTopic(null);
+                    setShowTextInput(false);
+                    setTextTopicInput("");
+                    setBookTitle("");
+                    setBookAuthor("");
                     setScreen("upload");
                   }}
                   style={{ background:sub.bg, border:`1.5px solid ${sub.border}`, borderRadius:12, padding:"18px 16px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, transform .1s" }}
@@ -1368,6 +1517,110 @@ ${SCHEMA_INSTRUCTIONS}`;
             <button className="ghost-hover" style={S.ghostBtn} onClick={handleOpenHistory}>
               View Session History →
             </button>
+          </div>
+        )}
+
+        {/* ── ADMIN PANEL ── */}
+        {screen === "admin" && (
+          <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+              <button onClick={() => setScreen("subjects")} style={{ background:"transparent", border:"none", color:"#444", fontSize:18, cursor:"pointer", padding:"0 4px" }}>←</button>
+              <div style={{ ...S.logo, marginBottom:0 }}>⚙ Admin Panel</div>
+            </div>
+            <div style={S.h1}>USER MANAGEMENT</div>
+
+            {/* Tab bar */}
+            <div style={{ display:"flex", background:"#111", borderRadius:8, padding:3, marginBottom:20 }}>
+              {[["pending","⏳ Pending"],["all","👥 All Users"],["add","➕ Add User"]].map(([tab, label]) => (
+                <button key={tab} onClick={() => setAdminTab(tab)}
+                  style={{ flex:1, padding:"8px 4px", background:adminTab===tab?"#E8FF45":"transparent", border:"none", borderRadius:6, color:adminTab===tab?"#000":"#444", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1, transition:"all .15s" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {adminMsg && <div style={{ background:"#0f1400", border:"1px solid #2a3000", borderRadius:7, padding:"10px 14px", marginBottom:14, color:"#E8FF45", fontSize:13, textAlign:"center" }}>{adminMsg}</div>}
+
+            {adminLoading && <div style={{ textAlign:"center", padding:24, color:"#444" }}>Loading…</div>}
+
+            {/* Pending tab */}
+            {adminTab === "pending" && !adminLoading && (
+              <div>
+                {adminUsers.filter(u => !u.is_approved && !u.is_admin).length === 0
+                  ? <div style={{ textAlign:"center", padding:24, color:"#333", fontSize:14 }}>No pending users 🎉</div>
+                  : adminUsers.filter(u => !u.is_approved && !u.is_admin).map(u => (
+                    <div key={u.username} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid #141414" }}>
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>{u.display_name}</div>
+                        <div style={{ fontSize:11, color:"#444", fontFamily:"monospace" }}>@{u.username}</div>
+                      </div>
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button onClick={() => handleApproveUser(u.username, true)}
+                          style={{ background:"#0b1f0b", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✓ Approve</button>
+                        <button onClick={() => handleDeleteUser(u.username)}
+                          style={{ background:"#1f0b0b", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✗ Delete</button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {/* All users tab */}
+            {adminTab === "all" && !adminLoading && (
+              <div>
+                {adminUsers.map(u => (
+                  <div key={u.username} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderBottom:"1px solid #141414" }}>
+                    <div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ fontSize:14, fontWeight:800, color:"#fff" }}>{u.display_name}</div>
+                        {u.is_admin && <span style={{ fontSize:9, background:"#E8FF4520", border:"1px solid #E8FF4444", borderRadius:4, padding:"2px 6px", color:"#E8FF45", fontWeight:800 }}>ADMIN</span>}
+                        {!u.is_approved && !u.is_admin && <span style={{ fontSize:9, background:"#ff6b6b20", border:"1px solid #ff6b6b44", borderRadius:4, padding:"2px 6px", color:"#ff6b6b", fontWeight:800 }}>PENDING</span>}
+                      </div>
+                      <div style={{ fontSize:11, color:"#444", fontFamily:"monospace" }}>@{u.username}</div>
+                    </div>
+                    {!u.is_admin && (
+                      <div style={{ display:"flex", gap:8 }}>
+                        {!u.is_approved
+                          ? <button onClick={() => handleApproveUser(u.username, true)} style={{ background:"#0b1f0b", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Approve</button>
+                          : <button onClick={() => handleApproveUser(u.username, false)} style={{ background:"#1a1400", border:"1px solid #E8FF4433", borderRadius:6, color:"#E8FF45", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Revoke</button>
+                        }
+                        <button onClick={() => handleDeleteUser(u.username)} style={{ background:"#1f0b0b", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Delete</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add user tab */}
+            {adminTab === "add" && (
+              <div>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:5, fontWeight:700 }}>DISPLAY NAME</div>
+                  <input value={adminNewDisplay} onChange={e=>setAdminNewDisplay(e.target.value)} placeholder="e.g. Emma"
+                    style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"10px 14px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:5, fontWeight:700 }}>USERNAME</div>
+                  <input value={adminNewUsername} onChange={e=>setAdminNewUsername(e.target.value)} placeholder="username" autoCapitalize="none"
+                    style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"10px 14px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+                </div>
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, color:"#444", letterSpacing:2, marginBottom:5, fontWeight:700 }}>PASSWORD</div>
+                  <input value={adminNewPassword} onChange={e=>setAdminNewPassword(e.target.value)} placeholder="••••••"
+                    style={{ width:"100%", background:"#111", border:"1.5px solid #2a2a2a", borderRadius:8, padding:"10px 14px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
+                  <input type="checkbox" checked={adminNewIsAdmin} onChange={e=>setAdminNewIsAdmin(e.target.checked)} id="isAdminChk" style={{ width:16, height:16, cursor:"pointer" }} />
+                  <label htmlFor="isAdminChk" style={{ fontSize:13, color:"#666", cursor:"pointer" }}>Make this user an admin</label>
+                </div>
+                <button onClick={handleAdminAddUser}
+                  style={{ width:"100%", padding:"14px", background:"#E8FF45", border:"none", borderRadius:8, color:"#000", fontSize:15, fontWeight:800, cursor:"pointer" }}>
+                  Create & Approve User →
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1433,19 +1686,90 @@ ${SCHEMA_INSTRUCTIONS}`;
               </div>
             </div>
 
-            {/* ── Add New Topic — large, full-width ── */}
-            <button
-              onClick={() => fileRef.current.click()}
-              onDragOver={(e)=>{e.preventDefault();setDragging(true);}}
-              onDragLeave={()=>setDragging(false)}
-              onDrop={(e)=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
-              style={{ width:"100%", marginBottom:16, background:dragging?"#E8FF450a":"transparent", border:`2px dashed ${dragging?"#E8FF45":"#2a2a2a"}`, borderRadius:12, padding:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:14, transition:"all .15s" }}>
-              <div style={{ fontSize:28, color:dragging?"#E8FF45":"#2a2a2a", lineHeight:1 }}>+</div>
-              <div style={{ textAlign:"left" }}>
-                <div style={{ fontSize:14, fontWeight:800, color:dragging?"#E8FF45":"#2a2a2a", letterSpacing:1 }}>ADD NEW TOPIC</div>
-                <div style={{ fontSize:11, color:dragging?"#E8FF4488":"#222", marginTop:2 }}>Upload homework · JPG, PNG, PDF, HEIC</div>
-              </div>
-            </button>
+            {/* ── Add New Topic — upload or text input ── */}
+            <div style={{ marginBottom:16 }}>
+
+              {/* Upload button — always shown */}
+              <button
+                onClick={() => fileRef.current.click()}
+                onDragOver={(e)=>{e.preventDefault();setDragging(true);}}
+                onDragLeave={()=>setDragging(false)}
+                onDrop={(e)=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
+                style={{ width:"100%", marginBottom:8, background:dragging?"#E8FF450a":"transparent", border:`2px dashed ${dragging?"#E8FF45":"#2a2a2a"}`, borderRadius:12, padding:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:14, transition:"all .15s" }}>
+                <div style={{ fontSize:24, color:dragging?"#E8FF45":"#2a2a2a", lineHeight:1 }}>+</div>
+                <div style={{ textAlign:"left" }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:dragging?"#E8FF45":"#2a2a2a", letterSpacing:1 }}>UPLOAD HOMEWORK</div>
+                  <div style={{ fontSize:11, color:dragging?"#E8FF4488":"#222", marginTop:2 }}>JPG, PNG, PDF, HEIC</div>
+                </div>
+              </button>
+
+              {/* Book input — English only */}
+              {subject?.supportsBookInput && (
+                <div style={{ border:"1.5px solid #2a1a50", borderRadius:12, overflow:"hidden" }}>
+                  <button onClick={() => setShowTextInput(v=>!v)}
+                    style={{ width:"100%", background:"#0d0820", border:"none", padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"background .15s" }}
+                    onMouseEnter={e=>e.currentTarget.style.background="#150d30"}
+                    onMouseLeave={e=>e.currentTarget.style.background="#0d0820"}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <span style={{ fontSize:16 }}>📖</span>
+                      <div style={{ textAlign:"left" }}>
+                        <div style={{ fontSize:13, fontWeight:800, color:"#a78bfa", letterSpacing:1 }}>ADD A BOOK</div>
+                        <div style={{ fontSize:10, color:"#2a1a50", marginTop:1 }}>Enter title & author to study</div>
+                      </div>
+                    </div>
+                    <span style={{ color:"#444", fontSize:12, transform:showTextInput?"rotate(180deg)":"none", transition:"transform .2s" }}>▼</span>
+                  </button>
+                  {showTextInput && (
+                    <div style={{ background:"#0a0515", padding:"14px 16px", borderTop:"1px solid #1a0a30", animation:"fade-in .15s ease" }}>
+                      <input value={bookTitle} onChange={e=>setBookTitle(e.target.value)}
+                        placeholder="Book title (e.g. The Hobbit)"
+                        style={{ width:"100%", background:"#111", border:"1.5px solid #2a1a50", borderRadius:8, padding:"10px 12px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:8, boxSizing:"border-box" }}
+                        onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
+                      <input value={bookAuthor} onChange={e=>setBookAuthor(e.target.value)}
+                        placeholder="Author (optional)"
+                        style={{ width:"100%", background:"#111", border:"1.5px solid #2a1a50", borderRadius:8, padding:"10px 12px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
+                        onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
+                      <button onClick={handleTextTopicSubmit} disabled={!bookTitle.trim()}
+                        style={{ width:"100%", padding:"10px", background:bookTitle.trim()?"#a78bfa":"#1a0a30", border:"none", borderRadius:8, color:bookTitle.trim()?"#000":"#333", fontSize:13, fontWeight:800, cursor:bookTitle.trim()?"pointer":"default" }}>
+                        Study This Book →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Theme input — Science, Social Studies, Religion */}
+              {subject?.supportsTextTopic && (
+                <div style={{ border:`1.5px solid ${subject.border}`, borderRadius:12, overflow:"hidden", marginTop:8 }}>
+                  <button onClick={() => setShowTextInput(v=>!v)}
+                    style={{ width:"100%", background:subject.bg, border:"none", padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"background .15s" }}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="0.85"}
+                    onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <span style={{ fontSize:16 }}>✏️</span>
+                      <div style={{ textAlign:"left" }}>
+                        <div style={{ fontSize:13, fontWeight:800, color:subject.accent, letterSpacing:1 }}>ENTER A THEME</div>
+                        <div style={{ fontSize:10, color:subject.accentDim, marginTop:1 }}>e.g. "Roman History" or "Clouds"</div>
+                      </div>
+                    </div>
+                    <span style={{ color:"#444", fontSize:12, transform:showTextInput?"rotate(180deg)":"none", transition:"transform .2s" }}>▼</span>
+                  </button>
+                  {showTextInput && (
+                    <div style={{ background:"#0a0a0a", padding:"14px 16px", borderTop:`1px solid ${subject.border}`, animation:"fade-in .15s ease" }}>
+                      <input value={textTopicInput} onChange={e=>setTextTopicInput(e.target.value)}
+                        placeholder={`e.g. "${subject.id === "religion" ? "The Seven Sacraments" : subject.id === "social_studies" ? "Ancient Rome" : "Photosynthesis"}"`}
+                        style={{ width:"100%", background:"#111", border:`1.5px solid ${subject.border}`, borderRadius:8, padding:"10px 12px", color:"#fff", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
+                        onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
+                      <button onClick={handleTextTopicSubmit} disabled={!textTopicInput.trim()}
+                        style={{ width:"100%", padding:"10px", background:textTopicInput.trim()?subject.accent:"#1a1a1a", border:"none", borderRadius:8, color:textTopicInput.trim()?"#000":"#333", fontSize:13, fontWeight:800, cursor:textTopicInput.trim()?"pointer":"default" }}>
+                        Study This Theme →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
 
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display:"none" }}
               onChange={(e)=>{if(e.target.files[0])handleFile(e.target.files[0]);}} />
@@ -1482,7 +1806,7 @@ ${SCHEMA_INSTRUCTIONS}`;
         {/* ── CONFIRM (homework topic detected) ── */}
         {screen === "confirm" && (
           <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
-            <div style={S.logo}>{hwTopic?._isGeneral ? "Ready to Practice" : hwTopic?._isMix ? "Mix Session" : "Homework Uploaded"}</div>
+            <div style={S.logo}>{hwTopic?._isGeneral ? "Ready to Practice" : hwTopic?._isMix ? "Mix Session" : hwTopic?._isBook ? "Book Study" : hwTopic?._isTextTopic ? "Custom Topic" : "Homework Uploaded"}</div>
 
             {hwDetecting ? (
               <div style={{ textAlign:"center", padding:"32px 0" }}>
@@ -1495,20 +1819,25 @@ ${SCHEMA_INSTRUCTIONS}`;
                 {(() => {
                   const isGeneral = hwTopic?._isGeneral;
                   const isMix = hwTopic?._isMix;
+                  const isBook = hwTopic?._isBook;
+                  const isTextTopic = hwTopic?._isTextTopic;
                   const accent = subject?.accent || "#E8FF45";
                   const accentDim = subject?.accentDim || "#3a4a00";
                   const bg = subject?.bg || "#0d1800";
                   const border = accent + "30";
+                  const modeLabel = isGeneral ? "General Practice" : isMix ? "Mixed Topics" : isBook ? "Book Study" : isTextTopic ? "Custom Topic" : "Topic Detected";
+                  const modeTitle = isGeneral ? (subject?.name || "General") : isMix ? "🔀 Mix" : hwTopic?.topicName || "Homework";
+                  const modeDesc = isGeneral ? subject?.generalLabel : isMix ? hwTopic.mixTopics?.map(t=>t.topicName).join(", ") : isBook ? (hwTopic.bookAuthor ? `by ${hwTopic.bookAuthor}` : "Literature study") : hwTopic?.description;
                   return (
                     <div style={{ background:bg, border:`1.5px solid ${border}`, borderRadius:12, padding:"20px 22px", marginBottom:24 }}>
                       <div style={{ fontSize:11, color:accentDim, letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:800 }}>
-                        {isGeneral ? "General Practice" : isMix ? "Mixed Topics" : "Topic Detected"}
+                        {modeLabel}
                       </div>
                       <div style={{ fontSize:24, fontWeight:800, color:accent, marginBottom:6, lineHeight:1.3 }}>
-                        {isGeneral ? subject?.name || "General" : isMix ? "🔀 Mix" : hwTopic?.topicName || "Homework"}
+                        {modeTitle}
                       </div>
                       <div style={{ fontSize:13, color:accentDim, lineHeight:1.6 }}>
-                        {isGeneral ? subject?.generalLabel : isMix ? hwTopic.mixTopics?.map(t=>t.topicName).join(", ") : hwTopic?.description}
+                        {modeDesc}
                       </div>
                     </div>
                   );
@@ -1542,9 +1871,12 @@ ${SCHEMA_INSTRUCTIONS}`;
                       if (hwTopic?._isGeneral || hwTopic?._isMix) {
                         // General / Mix: no topic to save, just start
                         startSession(null, null, hwTopic?._isMix ? hwTopic : null);
+                      } else if (hwTopic?._isBook || hwTopic?._isTextTopic) {
+                        // Book/text topic: save to bank, no image needed
+                        saveTopicToBank(hwTopic, subject?.id, currentUser?.username);
+                        startSession(null, null, hwTopic);
                       } else {
-                        // Homework topic: save to bank then start
-                        // Fire save first, don't await (session starts immediately)
+                        // Homework upload topic: save to bank then start with image
                         saveTopicToBank(hwTopic, subject?.id, currentUser?.username);
                         startSession(hwFile?.base64 || null, hwFile?.mediaType || null, hwTopic);
                       }
