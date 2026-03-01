@@ -492,6 +492,129 @@ async function saveSession(session, subjectId, username) {
 }
 async function clearSessions(subjectId, username) { try { await storage.delete(sessionsKey(subjectId, username)); } catch {} }
 
+// ─── Dashboard: load all subjects' sessions for one user ─────────────────────
+async function loadAllSubjectSessions(username) {
+  const results = {};
+  await Promise.all(SUBJECTS.map(async (sub) => {
+    results[sub.id] = await loadSessions(sub.id, username);
+  }));
+  return results;
+}
+
+// Build rich summary object from all-subject session data
+function buildDashboardData(allSessions, srsCards, stats, username, displayName) {
+  const subjectSummaries = {};
+  let totalSessions = 0, totalQuestions = 0, totalCorrect = 0;
+  const allSessionsFlat = [];
+
+  SUBJECTS.forEach(sub => {
+    const sessions = allSessions[sub.id] || [];
+    if (!sessions.length) {
+      subjectSummaries[sub.id] = { sessions: 0, avgScore: 0, trend: "no-data", recentScores: [], weakTopics: [], totalQuestions: 0 };
+      return;
+    }
+    totalSessions += sessions.length;
+    const recentScores = sessions.slice(0, 10).map(s => Math.round((s.correct / s.total) * 100));
+    const avgScore = Math.round(recentScores.reduce((a,b)=>a+b,0) / recentScores.length);
+    
+    // Trend: compare last 3 vs previous 3
+    const r3 = recentScores.slice(0,3), p3 = recentScores.slice(3,6);
+    const rAvg = r3.reduce((a,b)=>a+b,0)/r3.length;
+    const pAvg = p3.length ? p3.reduce((a,b)=>a+b,0)/p3.length : rAvg;
+    const trend = rAvg - pAvg >= 8 ? "improving" : pAvg - rAvg >= 8 ? "declining" : "steady";
+
+    // Weak topics from recent sessions
+    const topicErrors = {};
+    sessions.slice(0,8).forEach(s => s.log?.forEach(l => {
+      if (!l.ok) topicErrors[l.topic] = (topicErrors[l.topic]||0) + 1;
+    }));
+    const weakTopics = Object.entries(topicErrors).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t,n])=>({topic:t,count:n}));
+
+    const subTotal = sessions.reduce((a,s)=>a+s.total,0);
+    const subCorrect = sessions.reduce((a,s)=>a+s.correct,0);
+    totalQuestions += subTotal;
+    totalCorrect += subCorrect;
+    
+    sessions.forEach(s => allSessionsFlat.push({ ...s, subjectId: sub.id, subjectName: sub.name }));
+    
+    subjectSummaries[sub.id] = { sessions: sessions.length, avgScore, trend, recentScores, weakTopics, totalQuestions: subTotal, totalCorrect: subCorrect, accent: sub.accent, bg: sub.bg, border: sub.border, emoji: sub.emoji, name: sub.name };
+  });
+
+  // Weekly activity: count sessions per week for last 6 weeks
+  const now = Date.now();
+  const weeklyActivity = Array.from({length:6}, (_,i) => {
+    const wStart = now - (i+1)*7*86400000, wEnd = now - i*7*86400000;
+    return allSessionsFlat.filter(s => { const d = new Date(s.date).getTime(); return d >= wStart && d < wEnd; }).length;
+  }).reverse();
+
+  // Recent activity feed (last 8 sessions across all subjects)
+  allSessionsFlat.sort((a,b) => new Date(b.date) - new Date(a.date));
+  const recentActivity = allSessionsFlat.slice(0, 8);
+
+  // SRS health
+  const totalCards = srsCards.length;
+  const dueCards = srsCards.filter(c => c.dueDate <= new Date().toISOString().slice(0,10)).length;
+  const masteredCards = srsCards.filter(c => c.streak >= 5).length;
+
+  return {
+    username, displayName,
+    totalSessions, totalQuestions, totalCorrect,
+    avgScore: totalQuestions > 0 ? Math.round((totalCorrect/totalQuestions)*100) : 0,
+    currentStreak: stats?.currentStreak || 0,
+    bestStreak: stats?.bestStreak || 0,
+    weeklyActivity,
+    subjectSummaries,
+    recentActivity,
+    srsHealth: { totalCards, dueCards, masteredCards },
+    activeSince: allSessionsFlat.length > 0 ? allSessionsFlat[allSessionsFlat.length-1].date : null,
+  };
+}
+
+// AI-generated narrative insight for parent report
+async function generateStudentInsightReport(dashData) {
+  const subjectLines = SUBJECTS
+    .filter(s => dashData.subjectSummaries[s.id]?.sessions > 0)
+    .map(s => {
+      const d = dashData.subjectSummaries[s.id];
+      return `${s.name}: ${d.sessions} sessions, avg ${d.avgScore}%, trend: ${d.trend}, weak areas: ${d.weakTopics.map(w=>w.topic).join(", ")||"none identified"}`;
+    }).join("
+");
+
+  const prompt = `You are an educational advisor preparing a thoughtful progress report for a parent about their child's learning.
+
+Student: ${dashData.displayName}
+Total practice sessions: ${dashData.totalSessions}
+Total questions answered: ${dashData.totalQuestions}
+Overall accuracy: ${dashData.avgScore}%
+Current streak: ${dashData.currentStreak} days
+Spaced review cards mastered: ${dashData.srsHealth.masteredCards} of ${dashData.srsHealth.totalCards}
+
+Performance by subject:
+${subjectLines}
+
+Weekly session counts (oldest to newest, last 6 weeks): ${dashData.weeklyActivity.join(", ")}
+
+Write a warm, specific, data-driven parent report. Return ONLY a JSON object — no markdown, no extra text.
+Format:
+{
+  "headline": "One sentence summary of overall trajectory (specific, not generic)",
+  "strengths": ["2-3 specific observed strengths with subject/topic evidence"],
+  "growth_areas": ["2-3 specific areas needing attention with subject/topic evidence"],
+  "patterns": "2-3 sentences on observed learning patterns (e.g. consistency, best subjects, improvement rate)",
+  "recommendation": "2-3 sentences of specific, actionable next steps for the parent",
+  "encouragement": "One warm, specific sentence directly to the student (name them)"
+}`;
+
+  const res = await callAPI([{ role:"user", content: prompt }], 1000);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const data = JSON.parse(text);
+  const raw = data.content?.find(b => b.type==="text")?.text || "";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("No JSON in response");
+  return JSON.parse(match[0]);
+}
+
 // ─── Spaced Repetition System (SM-2 algorithm) ──────────────────────────────
 // Each card: { id, subjectId, topicKey, question, correctAnswer, lastSeen,
 //              interval, easeFactor, dueDate, totalReps, streak }
@@ -1067,6 +1190,17 @@ export default function App() {
   // Topic bank
   const [topicBank, setTopicBank] = useState([]);
   const [topicDropOpen, setTopicDropOpen] = useState(false);
+  // Dashboard state
+  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardInsights, setDashboardInsights] = useState(null);
+  const [dashboardInsightsLoading, setDashboardInsightsLoading] = useState(false);
+  const [dashboardInsightsError, setDashboardInsightsError] = useState(null);
+  const [dashboardTab, setDashboardTab] = useState("overview"); // overview | subjects | insights
+  const [dashboardSubject, setDashboardSubject] = useState(null); // subject id filter
+  const [dashboardViewUser, setDashboardViewUser] = useState(null); // for admin viewing others
+  const [adminStudents, setAdminStudents] = useState([]); // all students for admin dashboard list
+
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminTab, setAdminTab] = useState("pending"); // "pending" | "all" | "add"
@@ -1417,6 +1551,40 @@ export default function App() {
     }
   };
 
+  const openDashboard = async (targetUser) => {
+    setDashboardLoading(true);
+    setDashboardData(null); setDashboardInsights(null);
+    setDashboardInsightsError(null); setDashboardTab("overview");
+    setDashboardSubject(null); setDashboardViewUser(targetUser);
+    setScreen("dashboard");
+    try {
+      const [allSessions, srsCardsData, statsData] = await Promise.all([
+        loadAllSubjectSessions(targetUser.username),
+        loadSrsCards(targetUser.username),
+        loadStats(targetUser.username),
+      ]);
+      const data = buildDashboardData(allSessions, srsCardsData, statsData, targetUser.username, targetUser.displayName || targetUser.username);
+      setDashboardData(data);
+    } catch(e) { console.error("Dashboard load error:", e); }
+    finally { setDashboardLoading(false); }
+  };
+
+  const loadDashboardInsights = async () => {
+    if (!dashboardData) return;
+    setDashboardInsightsLoading(true); setDashboardInsightsError(null);
+    try {
+      const insights = await generateStudentInsightReport(dashboardData);
+      setDashboardInsights(insights);
+    } catch(e) { setDashboardInsightsError(e.message || "Could not generate insights"); }
+    finally { setDashboardInsightsLoading(false); }
+  };
+
+  const loadAdminStudentList = async () => {
+    const { supabase } = await import("./lib/supabase.js");
+    const { data } = await supabase.from("users").select("username, display_name, is_admin, is_approved").eq("is_approved", true).order("display_name");
+    if (data) setAdminStudents(data.filter(u => !u.is_admin));
+  };
+
   const handleLogout = () => {
     setCurrentUser(null);
     setSubject(null);
@@ -1671,9 +1839,14 @@ ${SCHEMA_INSTRUCTIONS}`;
               ))}
             </div>
 
-            <button className="ghost-hover" style={S.ghostBtn} onClick={handleOpenHistory}>
-              View Session History →
-            </button>
+            <div style={{ display:"flex", gap:8 }}>
+              <button className="ghost-hover" style={{ ...S.ghostBtn, flex:1 }} onClick={() => openDashboard(currentUser)}>
+                📊 My Progress
+              </button>
+              <button className="ghost-hover" style={{ ...S.ghostBtn, flex:1 }} onClick={handleOpenHistory}>
+                History →
+              </button>
+            </div>
           </div>
         )}
 
@@ -1688,8 +1861,8 @@ ${SCHEMA_INSTRUCTIONS}`;
 
             {/* Tab bar */}
             <div style={{ display:"flex", background:"#F0EEE9", borderRadius:8, padding:3, marginBottom:20 }}>
-              {[["pending","⏳ Pending"],["all","👥 All Users"],["add","➕ Add User"]].map(([tab, label]) => (
-                <button key={tab} onClick={() => setAdminTab(tab)}
+              {[["pending","⏳ Pending"],["all","👥 All Users"],["students","📊 Dashboards"],["add","➕ Add User"]].map(([tab, label]) => (
+                <button key={tab} onClick={() => { setAdminTab(tab); if (tab==="students") loadAdminStudentList(); }}
                   style={{ flex:1, padding:"8px 4px", background:adminTab===tab?"#1E3A5F":"transparent", border:"none", borderRadius:6, color:adminTab===tab?"#FFFFFF":"#9A9490", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1, transition:"all .15s" }}>
                   {label}
                 </button>
@@ -1747,6 +1920,28 @@ ${SCHEMA_INSTRUCTIONS}`;
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Student Dashboards tab */}
+            {adminTab === "students" && (
+              <div>
+                {adminStudents.length === 0
+                  ? <div style={{ textAlign:"center", padding:32, color:"#555" }}>No approved students yet.</div>
+                  : adminStudents.map(u => (
+                    <button key={u.username}
+                      onClick={() => openDashboard({ username: u.username, displayName: u.display_name })}
+                      style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 16px", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:10, marginBottom:8, cursor:"pointer", transition:"all .15s" }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor="#1E3A5F55";e.currentTarget.style.background="#EEF3FA";}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor="#E2DDD8";e.currentTarget.style.background="#F8F6F3";}}>
+                      <div style={{ textAlign:"left" }}>
+                        <div style={{ fontSize:15, fontWeight:800, color:"#1E3A5F" }}>{u.display_name}</div>
+                        <div style={{ fontSize:11, color:"#9A9490", fontFamily:"monospace" }}>@{u.username}</div>
+                      </div>
+                      <span style={{ fontSize:12, color:"#9A9490" }}>View Dashboard →</span>
+                    </button>
+                  ))
+                }
               </div>
             )}
 
@@ -2068,6 +2263,376 @@ ${SCHEMA_INSTRUCTIONS}`;
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── DASHBOARD ── */}
+        {screen === "dashboard" && (
+          <div style={{ ...S.wideCard, maxWidth:700, animation:"fade-in .3s ease", padding:"28px 24px" }}>
+
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:20 }}>
+              <div>
+                <div style={{ fontSize:11, color:"#9A9490", letterSpacing:4, textTransform:"uppercase", marginBottom:4 }}>
+                  {currentUser?.isAdmin && dashboardViewUser?.username !== currentUser?.username ? "Admin View" : "Progress Report"}
+                </div>
+                <div style={{ fontSize:28, fontWeight:800, color:"#1E3A5F", letterSpacing:-0.5 }}>
+                  {dashboardData ? dashboardData.displayName : "Loading…"}
+                </div>
+                {dashboardData?.activeSince && (
+                  <div style={{ fontSize:11, color:"#9A9490", marginTop:2 }}>
+                    Active since {new Date(dashboardData.activeSince).toLocaleDateString("en-US", {month:"long", year:"numeric"})}
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setScreen(currentUser?.isAdmin && dashboardViewUser?.username !== currentUser?.username ? "admin" : "subjects")}
+                style={{ background:"transparent", border:"none", color:"#9A9490", fontSize:22, cursor:"pointer", padding:4 }}>✕</button>
+            </div>
+
+            {dashboardLoading && (
+              <div style={{ textAlign:"center", padding:"60px 0" }}>
+                <div style={{ fontSize:36, display:"inline-block", animation:"spin 1.2s linear infinite", marginBottom:12 }}>⚙</div>
+                <div style={{ color:"#555", fontSize:14 }}>Loading student data…</div>
+              </div>
+            )}
+
+            {!dashboardLoading && dashboardData && (() => {
+              const d = dashboardData;
+
+              // ── Tab nav ──────────────────────────────────────────────────
+              return (<>
+                <div style={{ display:"flex", background:"#F0EEE9", borderRadius:8, padding:3, marginBottom:24, gap:3 }}>
+                  {[["overview","Overview"],["subjects","By Subject"],["insights","AI Report"]].map(([tab,label]) => (
+                    <button key={tab}
+                      onClick={() => { setDashboardTab(tab); if (tab==="insights" && !dashboardInsights && !dashboardInsightsLoading) loadDashboardInsights(); }}
+                      style={{ flex:1, padding:"9px 6px", background:dashboardTab===tab?"#1E3A5F":"transparent", border:"none", borderRadius:6, color:dashboardTab===tab?"#FFFFFF":"#9A9490", fontSize:12, fontWeight:800, cursor:"pointer", letterSpacing:1, textTransform:"uppercase", transition:"all .15s" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ════════ OVERVIEW TAB ════════ */}
+                {dashboardTab === "overview" && (<>
+
+                  {/* Stat row */}
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:24 }}>
+                    {[
+                      { label:"Sessions", value: d.totalSessions, sub: "total" },
+                      { label:"Questions", value: d.totalQuestions, sub: "answered" },
+                      { label:"Accuracy", value: d.avgScore + "%", sub: "overall", color: d.avgScore >= 70 ? POS_COLOR : d.avgScore >= 50 ? "#D97706" : NEG_COLOR },
+                      { label:"Streak", value: d.currentStreak, sub: d.currentStreak > 0 ? "days 🔥" : "days" },
+                    ].map(({ label, value, sub, color }) => (
+                      <div key={label} style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"14px 12px", textAlign:"center" }}>
+                        <div style={{ fontSize:22, fontWeight:800, color: color || "#1E3A5F", fontFamily:"monospace" }}>{value}</div>
+                        <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginTop:3 }}>{label}</div>
+                        <div style={{ fontSize:10, color:"#C0BCB8" }}>{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Weekly activity bar chart */}
+                  <div style={{ marginBottom:24 }}>
+                    <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>Weekly Activity</div>
+                    <div style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"16px 12px 10px" }}>
+                      {(() => {
+                        const max = Math.max(...d.weeklyActivity, 1);
+                        const weeks = ["6w ago","5w ago","4w ago","3w ago","2w ago","This week"];
+                        return (
+                          <div style={{ display:"flex", alignItems:"flex-end", gap:8, height:72 }}>
+                            {d.weeklyActivity.map((v,i) => (
+                              <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                                <div style={{ fontSize:9, color:"#9A9490", fontFamily:"monospace" }}>{v||""}</div>
+                                <div style={{ width:"100%", background: v > 0 ? "#1E3A5F" : "#E2DDD8", borderRadius:"3px 3px 0 0", height: Math.max((v/max)*52, v>0?6:2), transition:"height .4s ease" }} />
+                                <div style={{ fontSize:8, color:"#C0BCB8", textAlign:"center", lineHeight:1.2 }}>{weeks[i]}</div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Subject heatmap grid */}
+                  <div style={{ marginBottom:24 }}>
+                    <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>Subject Health</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      {SUBJECTS.map(sub => {
+                        const s = d.subjectSummaries[sub.id];
+                        if (!s?.sessions) return (
+                          <div key={sub.id} style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"12px 14px", opacity:0.5 }}>
+                            <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
+                              <span style={{ fontSize:16 }}>{sub.emoji}</span>
+                              <div style={{ fontSize:12, fontWeight:800, color:"#C0BCB8" }}>{sub.name}</div>
+                            </div>
+                            <div style={{ fontSize:10, color:"#C0BCB8" }}>No sessions yet</div>
+                          </div>
+                        );
+                        const scoreColor = s.avgScore >= 70 ? POS_COLOR : s.avgScore >= 50 ? "#D97706" : NEG_COLOR;
+                        const trendIcon = s.trend === "improving" ? "↑" : s.trend === "declining" ? "↓" : "→";
+                        const trendColor = s.trend === "improving" ? POS_COLOR : s.trend === "declining" ? NEG_COLOR : "#9A9490";
+                        return (
+                          <div key={sub.id} style={{ background:sub.bg, border:`1.5px solid ${sub.border}`, borderRadius:10, padding:"12px 14px", cursor:"pointer" }}
+                            onClick={() => { setDashboardTab("subjects"); setDashboardSubject(sub.id); }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                                <span style={{ fontSize:16 }}>{sub.emoji}</span>
+                                <div style={{ fontSize:12, fontWeight:800, color:sub.accent }}>{sub.name}</div>
+                              </div>
+                              <span style={{ fontSize:13, fontWeight:800, color:trendColor }}>{trendIcon}</span>
+                            </div>
+                            {/* Mini sparkline */}
+                            {s.recentScores.length > 1 && (() => {
+                              const pts = s.recentScores.slice().reverse();
+                              const w = 100, h = 28;
+                              const xs = pts.map((_,i) => Math.round((i/(pts.length-1))*w));
+                              const ys = pts.map(v => Math.round(h - (v/100)*h));
+                              const path = pts.map((v,i) => `${i===0?"M":"L"}${xs[i]},${ys[i]}`).join(" ");
+                              return (
+                                <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display:"block", marginBottom:6 }} preserveAspectRatio="none">
+                                  <path d={path} stroke={sub.accent} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                                  <circle cx={xs[xs.length-1]} cy={ys[ys.length-1]} r="3" fill={scoreColor} />
+                                </svg>
+                              );
+                            })()}
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                              <div style={{ fontSize:11, color:sub.accentDim }}>{s.sessions} session{s.sessions!==1?"s":""}</div>
+                              <div style={{ fontSize:16, fontWeight:800, color:scoreColor, fontFamily:"monospace" }}>{s.avgScore}%</div>
+                            </div>
+                            {/* Score bar */}
+                            <div style={{ background:sub.border, borderRadius:3, height:4, marginTop:6, overflow:"hidden" }}>
+                              <div style={{ height:"100%", width:`${s.avgScore}%`, background:scoreColor, borderRadius:3, transition:"width .5s ease" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* SRS health */}
+                  {d.srsHealth.totalCards > 0 && (
+                    <div style={{ marginBottom:24 }}>
+                      <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>Spaced Review Health</div>
+                      <div style={{ background:"#EEF3FA", border:"1.5px solid #1E3A5F22", borderRadius:10, padding:"14px 16px" }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, textAlign:"center" }}>
+                          {[
+                            { label:"Total Cards", value:d.srsHealth.totalCards, color:"#1E3A5F" },
+                            { label:"Due Today", value:d.srsHealth.dueCards, color:d.srsHealth.dueCards>0?"#D97706":POS_COLOR },
+                            { label:"Mastered (5+ streak)", value:d.srsHealth.masteredCards, color:POS_COLOR },
+                          ].map(({label,value,color}) => (
+                            <div key={label}>
+                              <div style={{ fontSize:20, fontWeight:800, color, fontFamily:"monospace" }}>{value}</div>
+                              <div style={{ fontSize:9, color:"#9A9490", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{label}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ marginTop:10, background:"#1E3A5F22", borderRadius:3, height:5, overflow:"hidden" }}>
+                          <div style={{ height:"100%", width:`${Math.round((d.srsHealth.masteredCards/d.srsHealth.totalCards)*100)}%`, background:POS_COLOR, borderRadius:3, transition:"width .5s ease" }} />
+                        </div>
+                        <div style={{ fontSize:10, color:"#9A9490", marginTop:4, textAlign:"right" }}>
+                          {Math.round((d.srsHealth.masteredCards/d.srsHealth.totalCards)*100)}% mastery rate
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recent activity feed */}
+                  {d.recentActivity.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>Recent Sessions</div>
+                      {d.recentActivity.map((s,i) => {
+                        const sp = Math.round((s.correct/s.total)*100);
+                        const sub = SUBJECTS.find(sb => sb.id === s.subjectId);
+                        return (
+                          <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid #F0EEE9" }}>
+                            <span style={{ fontSize:18 }}>{sub?.emoji||"📚"}</span>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:13, fontWeight:700, color:"#1E3A5F" }}>{s.subjectName}</div>
+                              <div style={{ fontSize:10, color:"#C0BCB8" }}>{new Date(s.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+                            </div>
+                            <div style={{ fontFamily:"monospace", fontSize:13, fontWeight:800, color:sp>=70?POS_COLOR:sp>=50?"#D97706":NEG_COLOR }}>{s.correct}/{s.total}</div>
+                            <div style={{ width:40, background:"#F0EEE9", borderRadius:3, height:5, overflow:"hidden" }}>
+                              <div style={{ height:"100%", width:`${sp}%`, background:sp>=70?POS_COLOR:sp>=50?"#D97706":NEG_COLOR, borderRadius:3 }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>)}
+
+                {/* ════════ BY SUBJECT TAB ════════ */}
+                {dashboardTab === "subjects" && (<>
+                  {/* Subject selector */}
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:20 }}>
+                    <button onClick={() => setDashboardSubject(null)}
+                      style={{ padding:"6px 14px", background:!dashboardSubject?"#1E3A5F":"transparent", border:"1.5px solid " + (!dashboardSubject?"#1E3A5F":"#E2DDD8"), borderRadius:20, color:!dashboardSubject?"#fff":"#9A9490", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      All
+                    </button>
+                    {SUBJECTS.map(sub => (
+                      <button key={sub.id} onClick={() => setDashboardSubject(sub.id)}
+                        style={{ padding:"6px 14px", background:dashboardSubject===sub.id?sub.accent:"transparent", border:`1.5px solid ${dashboardSubject===sub.id?sub.accent:sub.border}`, borderRadius:20, color:dashboardSubject===sub.id?"#fff":sub.accent, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        {sub.emoji} {sub.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {(dashboardSubject ? SUBJECTS.filter(s=>s.id===dashboardSubject) : SUBJECTS).map(sub => {
+                    const s = d.subjectSummaries[sub.id];
+                    if (!s?.sessions) return (
+                      <div key={sub.id} style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"16px 18px", marginBottom:12, opacity:0.55 }}>
+                        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                          <span style={{ fontSize:18 }}>{sub.emoji}</span>
+                          <div style={{ fontSize:14, fontWeight:800, color:"#C0BCB8" }}>{sub.name} — No sessions yet</div>
+                        </div>
+                      </div>
+                    );
+                    const scoreColor = s.avgScore >= 70 ? POS_COLOR : s.avgScore >= 50 ? "#D97706" : NEG_COLOR;
+                    return (
+                      <div key={sub.id} style={{ background:"#FFFFFF", border:`1.5px solid ${sub.border}`, borderRadius:12, padding:"18px 20px", marginBottom:16 }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                            <span style={{ fontSize:20 }}>{sub.emoji}</span>
+                            <div>
+                              <div style={{ fontSize:16, fontWeight:800, color:sub.accent }}>{sub.name}</div>
+                              <div style={{ fontSize:10, color:sub.accentDim }}>{s.sessions} sessions · {s.totalQuestions} questions</div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign:"right" }}>
+                            <div style={{ fontSize:24, fontWeight:800, color:scoreColor, fontFamily:"monospace" }}>{s.avgScore}%</div>
+                            <div style={{ fontSize:10, color:s.trend==="improving"?POS_COLOR:s.trend==="declining"?NEG_COLOR:"#9A9490", fontWeight:700 }}>
+                              {s.trend==="improving"?"↑ Improving":s.trend==="declining"?"↓ Declining":"→ Steady"}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Score history chart */}
+                        {s.recentScores.length > 1 && (() => {
+                          const pts = s.recentScores.slice().reverse();
+                          const w=300, h=60, padL=28, padB=16;
+                          const xs = pts.map((_,i) => padL + Math.round((i/(pts.length-1))*(w-padL)));
+                          const ys = pts.map(v => Math.round(h - padB - ((v/100)*(h-padB-4))));
+                          const path = pts.map((v,i) => `${i===0?"M":"L"}${xs[i]},${ys[i]}`).join(" ");
+                          const areaPath = `${path} L${xs[xs.length-1]},${h-padB} L${xs[0]},${h-padB} Z`;
+                          return (
+                            <div style={{ background:sub.bg, borderRadius:8, padding:"10px 8px 4px", marginBottom:12 }}>
+                              <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display:"block", overflow:"visible" }}>
+                                {/* Y-axis guides */}
+                                {[0,50,70,100].map(v => {
+                                  const y = Math.round(h - padB - ((v/100)*(h-padB-4)));
+                                  return <g key={v}><line x1={padL} y1={y} x2={w} y2={y} stroke={sub.border} strokeWidth="1" strokeDasharray="3,3"/><text x={padL-4} y={y+4} textAnchor="end" fill={sub.accentDim} fontSize="8">{v}</text></g>;
+                                })}
+                                {/* Area fill */}
+                                <path d={areaPath} fill={sub.accent} opacity="0.08" />
+                                {/* Line */}
+                                <path d={path} stroke={sub.accent} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                                {/* Dots */}
+                                {pts.map((v,i) => <circle key={i} cx={xs[i]} cy={ys[i]} r="4" fill={sub.accent} stroke="#fff" strokeWidth="1.5" />)}
+                              </svg>
+                              <div style={{ display:"flex", justifyContent:"space-between", padding:"0 8px" }}>
+                                <div style={{ fontSize:9, color:sub.accentDim }}>← Oldest</div>
+                                <div style={{ fontSize:9, color:sub.accentDim }}>Most Recent →</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {/* Weak topics */}
+                        {s.weakTopics.length > 0 && (
+                          <div>
+                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Needs Attention</div>
+                            {s.weakTopics.map(({topic,count}) => (
+                              <div key={topic} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #F0EEE9" }}>
+                                <span style={{ fontSize:12, color:"#555" }}>{topicLabel(topic)}</span>
+                                <span style={{ fontSize:11, color:NEG_COLOR, fontFamily:"monospace", fontWeight:700 }}>{count} missed</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {s.weakTopics.length === 0 && s.sessions > 0 && (
+                          <div style={{ fontSize:12, color:POS_COLOR, fontWeight:700 }}>✓ No persistent weak spots detected</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>)}
+
+                {/* ════════ AI INSIGHTS TAB ════════ */}
+                {dashboardTab === "insights" && (
+                  <div>
+                    {dashboardInsightsLoading && (
+                      <div style={{ textAlign:"center", padding:"48px 0" }}>
+                        <div style={{ fontSize:34, display:"inline-block", animation:"spin 1.2s linear infinite", marginBottom:12 }}>⚙</div>
+                        <div style={{ color:"#555", fontSize:14 }}>Generating personalized report…</div>
+                        <div style={{ color:"#C0BCB8", fontSize:11, marginTop:6 }}>Analyzing all subjects and patterns</div>
+                      </div>
+                    )}
+                    {dashboardInsightsError && <div style={S.err}>{dashboardInsightsError}</div>}
+                    {!dashboardInsightsLoading && dashboardInsights && (() => {
+                      const ins = dashboardInsights;
+                      return (
+                        <div style={{ animation:"fade-in .3s ease" }}>
+                          {/* Headline */}
+                          <div style={{ background:"#EEF3FA", border:"1.5px solid #1E3A5F22", borderRadius:12, padding:"18px 20px", marginBottom:18 }}>
+                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Overall Assessment</div>
+                            <div style={{ fontSize:16, fontWeight:700, color:"#1E3A5F", lineHeight:1.6 }}>{ins.headline}</div>
+                          </div>
+
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:18 }}>
+                            {/* Strengths */}
+                            <div style={{ background:"#F0FDF4", border:"1.5px solid #BBF7D0", borderRadius:12, padding:"16px" }}>
+                              <div style={{ fontSize:10, color:POS_COLOR, letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>✓ Strengths</div>
+                              {(ins.strengths||[]).map((s,i) => (
+                                <div key={i} style={{ fontSize:13, color:"#166534", lineHeight:1.7, marginBottom:6, paddingLeft:8, borderLeft:`2px solid ${POS_COLOR}` }}>
+                                  {s}
+                                </div>
+                              ))}
+                            </div>
+                            {/* Growth areas */}
+                            <div style={{ background:"#FFF7ED", border:"1.5px solid #FED7AA", borderRadius:12, padding:"16px" }}>
+                              <div style={{ fontSize:10, color:"#D97706", letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700 }}>↑ Growth Areas</div>
+                              {(ins.growth_areas||[]).map((s,i) => (
+                                <div key={i} style={{ fontSize:13, color:"#92400E", lineHeight:1.7, marginBottom:6, paddingLeft:8, borderLeft:"2px solid #D97706" }}>
+                                  {s}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Patterns */}
+                          <div style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+                            <div style={{ fontSize:10, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>Learning Patterns</div>
+                            <div style={{ fontSize:14, color:"#444", lineHeight:1.85 }}>{ins.patterns}</div>
+                          </div>
+
+                          {/* Recommendation */}
+                          <div style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+                            <div style={{ fontSize:10, color:"#92400E", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>💡 Recommended Next Steps</div>
+                            <div style={{ fontSize:14, color:"#78350F", lineHeight:1.85 }}>{ins.recommendation}</div>
+                          </div>
+
+                          {/* Encouragement */}
+                          <div style={{ background:"linear-gradient(135deg, #EEF3FA 0%, #F5F3FF 100%)", border:"1.5px solid #C8D8E8", borderRadius:12, padding:"16px 18px", marginBottom:20 }}>
+                            <div style={{ fontSize:10, color:"#1E3A5F", letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>To {d.displayName}</div>
+                            <div style={{ fontSize:14, color:"#1E3A5F", lineHeight:1.85, fontStyle:"italic" }}>"{ins.encouragement}"</div>
+                          </div>
+
+                          <button onClick={() => { setDashboardInsights(null); loadDashboardInsights(); }}
+                            style={{ width:"100%", padding:"12px", background:"transparent", border:"1.5px solid #E2DDD8", borderRadius:8, color:"#9A9490", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                            ↺ Regenerate Report
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    {!dashboardInsightsLoading && !dashboardInsights && !dashboardInsightsError && (
+                      <div style={{ textAlign:"center", padding:"32px 0" }}>
+                        <div style={{ fontSize:40, marginBottom:12 }}>📊</div>
+                        <div style={{ color:"#555", fontSize:14, marginBottom:6 }}>Click "AI Report" tab to generate</div>
+                        <div style={{ color:"#C0BCB8", fontSize:11 }}>Uses all session data to write a personalized parent report</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </>);
+            })()}
           </div>
         )}
 
