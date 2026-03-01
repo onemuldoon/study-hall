@@ -1027,19 +1027,21 @@ export default function App() {
       let base64 = e.target.result.split(",")[1];
       let mediaType = finalFile.type || "image/jpeg";
 
-      // ── Compress image to stay under Vercel's 4.5MB function limit ──────
+      // ── Compress image aggressively to stay under Vercel's 4.5MB limit ─
       try {
         const img = new Image();
         await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = e.target.result; });
-        const MAX = 1200;
+        const MAX = 800;
         let w = img.width, h = img.height;
-        if (w > MAX || h > MAX) { const scale = Math.min(MAX/w, MAX/h); w = Math.round(w*scale); h = Math.round(h*scale); }
+        const scale = Math.min(MAX/w, MAX/h, 1);
+        w = Math.round(w * scale); h = Math.round(h * scale);
         const canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
         canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        const compressed = canvas.toDataURL("image/jpeg", 0.82);
+        const compressed = canvas.toDataURL("image/jpeg", 0.70);
         base64 = compressed.split(",")[1];
         mediaType = "image/jpeg";
+        console.log("Compressed to " + w + "x" + h + ", ~" + Math.round(base64.length/1024) + "KB base64");
       } catch (compressErr) {
         console.warn("Compression skipped:", compressErr);
       }
