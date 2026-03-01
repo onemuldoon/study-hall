@@ -376,6 +376,481 @@ function CoordGrid({ point, graphPoints, submitted, correct }) {
   );
 }
 
+// ─── Visual Renderers ────────────────────────────────────────────────────────
+// Dispatcher: renders the correct visual based on prob.visual.type
+function QuestionVisual({ visual, submitted, isCorrect }) {
+  if (!visual?.type) return null;
+  const V = visual;
+  switch (V.type) {
+    case "fraction_bar":     return <FractionBar v={V} />;
+    case "fraction_compare": return <FractionCompare v={V} />;
+    case "geometry":         return <GeometryShape v={V} />;
+    case "bar_chart":        return <DataBarChart v={V} />;
+    case "line_chart":       return <DataLineChart v={V} />;
+    case "labeled_diagram":  return <LabeledDiagram v={V} submitted={submitted} isCorrect={isCorrect} />;
+    case "venn":             return <VennDiagram v={V} />;
+    case "sentence_diagram": return <SentenceDiagram v={V} />;
+    case "timeline":         return <TimelineVisual v={V} />;
+    default: return null;
+  }
+}
+
+// ── Fraction Bar ──────────────────────────────────────────────────────────────
+function FractionBar({ v }) {
+  const { numerator: n, denominator: d, highlight = [], color = "#1E3A5F" } = v;
+  if (!d || d < 1 || d > 20) return null;
+  const W = 300, H = 48, segW = W / d;
+  const hiSet = new Set(highlight.length ? highlight : Array.from({length:n},(_,i)=>i));
+  return (
+    <div style={{ margin:"0 0 18px", display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {Array.from({length:d},(_,i) => (
+          <g key={i}>
+            <rect x={i*segW+1} y={1} width={segW-2} height={H-2}
+              fill={hiSet.has(i) ? color : "#F0EEE9"}
+              stroke={color} strokeWidth={1.5} rx={3} />
+            <text x={i*segW+segW/2} y={H/2+5} textAnchor="middle"
+              fill={hiSet.has(i)?"#fff":"#9A9490"} fontSize={11} fontWeight={700}>
+              {hiSet.has(i) ? "✓" : ""}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div style={{ fontFamily:"monospace", fontSize:15, fontWeight:800, color }}>
+        {n}/{d} = {Math.round(n/d*100)}%
+      </div>
+    </div>
+  );
+}
+
+// ── Fraction Compare ──────────────────────────────────────────────────────────
+function FractionCompare({ v }) {
+  const { fractions = [] } = v;
+  if (!fractions.length) return null;
+  const colors = ["#1E3A5F","#c084fc","#60a5fa","#f0a050"];
+  const W = 280, H = 36;
+  return (
+    <div style={{ margin:"0 0 18px", display:"flex", flexDirection:"column", gap:8, alignItems:"center" }}>
+      {fractions.map((fr, fi) => {
+        const { n, d, label } = fr;
+        if (!d) return null;
+        const segW = W / d;
+        const color = colors[fi % colors.length];
+        return (
+          <div key={fi} style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
+            <div style={{ fontFamily:"monospace", fontSize:13, fontWeight:800, color, minWidth:36, textAlign:"right" }}>{n}/{d}</div>
+            <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ flex:1 }}>
+              {Array.from({length:d},(_,i) => (
+                <rect key={i} x={i*segW+1} y={1} width={segW-2} height={H-2}
+                  fill={i < n ? color : "#F0EEE9"} stroke={color} strokeWidth={1.5} rx={3}/>
+              ))}
+            </svg>
+            {label && <div style={{ fontSize:11, color:"#9A9490", minWidth:30 }}>{label}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Geometry Shape ────────────────────────────────────────────────────────────
+function GeometryShape({ v }) {
+  const { shape = "triangle", sides = [], angles = [], labels = {}, color = "#1E3A5F" } = v;
+  const W = 280, H = 200;
+  const cx = W/2, cy = H/2;
+  let shapeEl = null, labelEls = [];
+
+  if (shape === "triangle") {
+    // right-leaning triangle
+    const pts = [[cx-80, cy+60],[cx+80, cy+60],[cx-80, cy-60]];
+    const d = pts.map((p,i)=>`${i===0?"M":"L"}${p[0]},${p[1]}`).join(" ")+"Z";
+    shapeEl = <path d={d} fill={color+"15"} stroke={color} strokeWidth={2.5} strokeLinejoin="round"/>;
+    // side labels: midpoints
+    const midpoints = [
+      [(pts[0][0]+pts[1][0])/2, (pts[0][1]+pts[1][1])/2+14], // bottom
+      [(pts[1][0]+pts[2][0])/2+18, (pts[1][1]+pts[2][1])/2],   // right
+      [(pts[0][0]+pts[2][0])/2-18, (pts[0][1]+pts[2][1])/2],   // left
+    ];
+    sides.forEach((s,i) => {
+      if (midpoints[i]) labelEls.push(
+        <text key={"s"+i} x={midpoints[i][0]} y={midpoints[i][1]} textAnchor="middle"
+          fill="#555" fontSize={13} fontWeight={700}>{s}</text>
+      );
+    });
+    // vertex angle labels
+    const verts = [
+      [pts[0][0]-14, pts[0][1]+6],
+      [pts[1][0]+14, pts[1][1]+6],
+      [pts[2][0]-14, pts[2][1]-6],
+    ];
+    angles.forEach((a,i) => {
+      if (verts[i]) labelEls.push(
+        <text key={"a"+i} x={verts[i][0]} y={verts[i][1]} textAnchor="middle"
+          fill={color} fontSize={11} fontWeight={800}>{a}</text>
+      );
+    });
+    // vertex letter labels
+    Object.entries(labels).forEach(([letter, pos], i) => {
+      const idx = ["A","B","C"].indexOf(letter);
+      if (idx >= 0) {
+        const offsets = [[-20,8],[22,8],[-20,-8]];
+        labelEls.push(
+          <text key={"l"+letter} x={pts[idx][0]+offsets[idx][0]} y={pts[idx][1]+offsets[idx][1]}
+            fill={color} fontSize={14} fontWeight={900}>{letter}</text>
+        );
+      }
+    });
+    // right angle marker
+    if (angles.some(a => a === "90°")) {
+      labelEls.push(<rect key="ra" x={pts[0][0]} y={pts[0][1]-14} width={12} height={12}
+        fill="none" stroke={color} strokeWidth={1.5}/>);
+    }
+  } else if (shape === "rectangle") {
+    const x0=cx-90, y0=cy-45, rw=180, rh=90;
+    shapeEl = <rect x={x0} y={y0} width={rw} height={rh} fill={color+"15"} stroke={color} strokeWidth={2.5} rx={4}/>;
+    // side labels
+    if (sides[0]) labelEls.push(<text key="s0" x={cx} y={y0-8} textAnchor="middle" fill="#555" fontSize={13} fontWeight={700}>{sides[0]}</text>);
+    if (sides[1]) labelEls.push(<text key="s1" x={x0+rw+10} y={cy+5} textAnchor="start" fill="#555" fontSize={13} fontWeight={700}>{sides[1]}</text>);
+    if (sides[2]) labelEls.push(<text key="s2" x={cx} y={y0+rh+18} textAnchor="middle" fill="#555" fontSize={13} fontWeight={700}>{sides[2]||sides[0]}</text>);
+    if (sides[3]) labelEls.push(<text key="s3" x={x0-10} y={cy+5} textAnchor="end" fill="#555" fontSize={13} fontWeight={700}>{sides[3]||sides[1]}</text>);
+  } else if (shape === "circle") {
+    const r = 65;
+    shapeEl = <circle cx={cx} cy={cy} r={r} fill={color+"15"} stroke={color} strokeWidth={2.5}/>;
+    if (sides[0]) { // radius label
+      shapeEl = <>{shapeEl}<line x1={cx} y1={cy} x2={cx+r} y2={cy} stroke={color} strokeWidth={1.5} strokeDasharray="4,3"/>
+        <text x={cx+r/2} y={cy-8} textAnchor="middle" fill="#555" fontSize={13} fontWeight={700}>{sides[0]}</text></>;
+    }
+  }
+
+  return (
+    <div style={{ margin:"0 0 18px", display:"flex", justifyContent:"center" }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ maxWidth:300 }}>
+        {shapeEl}
+        {labelEls}
+      </svg>
+    </div>
+  );
+}
+
+// ── Data Bar Chart ────────────────────────────────────────────────────────────
+function DataBarChart({ v }) {
+  const { bars = [], title = "", xLabel = "", yLabel = "", highlightBar } = v;
+  if (!bars.length) return null;
+  const W=300, H=160, padL=36, padB=40, padT=24, padR=10;
+  const chartW = W-padL-padR, chartH = H-padB-padT;
+  const maxVal = Math.max(...bars.map(b=>b.value), 1);
+  const barW = Math.min(chartW/bars.length*0.6, 36);
+  const gap = chartW/bars.length;
+  const toY = v => padT + chartH - (v/maxVal)*chartH;
+  const yTicks = [0, Math.round(maxVal*0.5), maxVal];
+  return (
+    <div style={{ margin:"0 0 18px" }}>
+      {title && <div style={{ textAlign:"center", fontSize:12, fontWeight:700, color:"#555", marginBottom:4 }}>{title}</div>}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {/* Y axis */}
+        <line x1={padL} y1={padT} x2={padL} y2={padT+chartH} stroke="#C0BCB8" strokeWidth={1.5}/>
+        {/* X axis */}
+        <line x1={padL} y1={padT+chartH} x2={W-padR} y2={padT+chartH} stroke="#C0BCB8" strokeWidth={1.5}/>
+        {/* Y ticks */}
+        {yTicks.map(t => (
+          <g key={t}>
+            <line x1={padL-4} y1={toY(t)} x2={padL} y2={toY(t)} stroke="#C0BCB8" strokeWidth={1}/>
+            <text x={padL-7} y={toY(t)+4} textAnchor="end" fill="#9A9490" fontSize={9}>{t}</text>
+            <line x1={padL} y1={toY(t)} x2={W-padR} y2={toY(t)} stroke="#F0EEE9" strokeWidth={1}/>
+          </g>
+        ))}
+        {/* Bars */}
+        {bars.map((b,i) => {
+          const bx = padL + gap*i + gap/2 - barW/2;
+          const by = toY(b.value);
+          const bh = padT+chartH - by;
+          const isHi = highlightBar === b.label || highlightBar === i;
+          return (
+            <g key={i}>
+              <rect x={bx} y={by} width={barW} height={bh}
+                fill={isHi ? "#c084fc" : "#1E3A5F"} opacity={isHi?1:0.75} rx={3}/>
+              <text x={bx+barW/2} y={by-4} textAnchor="middle" fill="#555" fontSize={9} fontWeight={700}>{b.value}</text>
+              <text x={bx+barW/2} y={padT+chartH+14} textAnchor="middle" fill="#555" fontSize={9}
+                transform={`rotate(-25,${bx+barW/2},${padT+chartH+14})`}>{b.label}</text>
+            </g>
+          );
+        })}
+        {yLabel && <text x={10} y={H/2} textAnchor="middle" fill="#9A9490" fontSize={9} transform={`rotate(-90,10,${H/2})`}>{yLabel}</text>}
+      </svg>
+    </div>
+  );
+}
+
+// ── Data Line Chart ───────────────────────────────────────────────────────────
+function DataLineChart({ v }) {
+  const { points = [], title = "", xLabel = "", yLabel = "", color = "#1E3A5F" } = v;
+  if (points.length < 2) return null;
+  const W=300, H=140, padL=36, padB=32, padT=20, padR=10;
+  const chartW=W-padL-padR, chartH=H-padB-padT;
+  const yVals = points.map(p=>p.y);
+  const yMin = Math.min(...yVals), yMax = Math.max(...yVals,yMin+1);
+  const toX = i => padL + (i/(points.length-1))*chartW;
+  const toY = y => padT + chartH - ((y-yMin)/(yMax-yMin))*chartH;
+  const path = points.map((p,i)=>`${i===0?"M":"L"}${toX(i)},${toY(p.y)}`).join(" ");
+  const area = `${path} L${toX(points.length-1)},${padT+chartH} L${padL},${padT+chartH} Z`;
+  return (
+    <div style={{ margin:"0 0 18px" }}>
+      {title && <div style={{ textAlign:"center", fontSize:12, fontWeight:700, color:"#555", marginBottom:4 }}>{title}</div>}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        <line x1={padL} y1={padT} x2={padL} y2={padT+chartH} stroke="#C0BCB8" strokeWidth={1.5}/>
+        <line x1={padL} y1={padT+chartH} x2={W-padR} y2={padT+chartH} stroke="#C0BCB8" strokeWidth={1.5}/>
+        {[yMin, Math.round((yMin+yMax)/2), yMax].map(t => (
+          <g key={t}>
+            <text x={padL-7} y={toY(t)+4} textAnchor="end" fill="#9A9490" fontSize={9}>{t}</text>
+            <line x1={padL} y1={toY(t)} x2={W-padR} y2={toY(t)} stroke="#F0EEE9" strokeWidth={1}/>
+          </g>
+        ))}
+        <path d={area} fill={color} opacity={0.08}/>
+        <path d={path} stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        {points.map((p,i) => (
+          <g key={i}>
+            <circle cx={toX(i)} cy={toY(p.y)} r={4} fill={color} stroke="#fff" strokeWidth={1.5}/>
+            <text x={toX(i)} y={padT+chartH+14} textAnchor="middle" fill="#555" fontSize={9}
+              transform={`rotate(-25,${toX(i)},${padT+chartH+14})`}>{p.x}</text>
+          </g>
+        ))}
+        {yLabel && <text x={10} y={H/2} textAnchor="middle" fill="#9A9490" fontSize={9} transform={`rotate(-90,10,${H/2})`}>{yLabel}</text>}
+      </svg>
+    </div>
+  );
+}
+
+// ── Labeled Diagram ───────────────────────────────────────────────────────────
+function LabeledDiagram({ v, submitted, isCorrect }) {
+  const { shape="circle", title="", labels=[], askLabel, layers } = v;
+  const W=280, H=200, cx=W/2, cy=H/2;
+  const colors = ["#1E3A5F","#c084fc","#60a5fa","#f0a050","#4ade80","#fb7185"];
+
+  // Layers shape (earth layers, atmosphere, etc.)
+  if (shape === "layers" && layers?.length) {
+    const lH = 140, lW = 220, lx = (W-lW)/2, ly = (H-lH)/2;
+    let y = ly;
+    return (
+      <div style={{ margin:"0 0 18px" }}>
+        {title && <div style={{ textAlign:"center", fontSize:12, fontWeight:700, color:"#555", marginBottom:4 }}>{title}</div>}
+        <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+          {layers.map((layer, i) => {
+            const h = Math.round(lH * layer.height);
+            const el = (
+              <g key={i}>
+                <rect x={lx} y={y} width={lW} height={h}
+                  fill={layer.color || colors[i % colors.length]}
+                  stroke="#fff" strokeWidth={1.5} opacity={askLabel===layer.name?1:0.75}/>
+                {askLabel !== layer.name && (
+                  <text x={lx+lW/2} y={y+h/2+5} textAnchor="middle" fill="#fff" fontSize={11} fontWeight={700}>{layer.name}</text>
+                )}
+                {askLabel === layer.name && (
+                  <>
+                    <rect x={lx} y={y} width={lW} height={h} fill="none" stroke="#FDE68A" strokeWidth={3} rx={2}/>
+                    <text x={lx+lW/2} y={y+h/2+5} textAnchor="middle" fill="#FDE68A" fontSize={11} fontWeight={800}>?</text>
+                  </>
+                )}
+              </g>
+            );
+            y += h;
+            return el;
+          })}
+        </svg>
+      </div>
+    );
+  }
+
+  // Circle/oval with radiating label arrows
+  const rx = shape === "oval" ? 90 : 75;
+  const ry = shape === "oval" ? 60 : 75;
+  return (
+    <div style={{ margin:"0 0 18px" }}>
+      {title && <div style={{ textAlign:"center", fontSize:12, fontWeight:700, color:"#555", marginBottom:4 }}>{title}</div>}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow:"visible" }}>
+        <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="#EEF3FA" stroke="#1E3A5F44" strokeWidth={2}/>
+        {labels.map((lbl, i) => {
+          const angle = (lbl.angle ?? i * (360/labels.length)) * Math.PI / 180;
+          const r = lbl.radius ?? 0.7;
+          // Point on ellipse edge
+          const ex = cx + Math.cos(angle) * rx * 0.95;
+          const ey = cy + Math.sin(angle) * ry * 0.95;
+          // Label position further out
+          const lx2 = cx + Math.cos(angle) * (rx + 55);
+          const ly2 = cy + Math.sin(angle) * (ry + 35);
+          const isAsked = askLabel === lbl.id;
+          const c = colors[i % colors.length];
+          return (
+            <g key={lbl.id || i}>
+              <line x1={ex} y1={ey} x2={lx2} y2={ly2} stroke={isAsked?"#f0a050":c} strokeWidth={isAsked?2:1.5} strokeDasharray={isAsked?"":""} />
+              <circle cx={ex} cy={ey} r={4} fill={isAsked?"#f0a050":c}/>
+              <text x={lx2} y={ly2} textAnchor={Math.cos(angle) > 0 ? "start" : "end"}
+                fill={isAsked?"#f0a050":c} fontSize={10} fontWeight={700} dominantBaseline="middle">
+                {isAsked ? "← ?" : `${lbl.id ? lbl.id+". " : ""}${lbl.name}`}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ── Venn Diagram ──────────────────────────────────────────────────────────────
+function VennDiagram({ v }) {
+  const { leftLabel="", rightLabel="", leftOnly=[], both=[], rightOnly=[] } = v;
+  const W=300, H=190;
+  const r=75, lCx=105, rCx=195, cY=95;
+  return (
+    <div style={{ margin:"0 0 18px" }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow:"visible" }}>
+        <circle cx={lCx} cy={cY} r={r} fill="#1E3A5F" fillOpacity={0.1} stroke="#1E3A5F" strokeWidth={2}/>
+        <circle cx={rCx} cy={cY} r={r} fill="#c084fc" fillOpacity={0.1} stroke="#c084fc" strokeWidth={2}/>
+        <text x={lCx-r/2} y={22} textAnchor="middle" fill="#1E3A5F" fontSize={11} fontWeight={800}>{leftLabel}</text>
+        <text x={rCx+r/2} y={22} textAnchor="middle" fill="#c084fc" fontSize={11} fontWeight={800}>{rightLabel}</text>
+        {leftOnly.slice(0,4).map((t,i) => (
+          <text key={i} x={lCx-28} y={cY-18+i*18} textAnchor="middle" fill="#1E3A5F" fontSize={9} fontWeight={600}>{t}</text>
+        ))}
+        {both.slice(0,3).map((t,i) => (
+          <text key={i} x={W/2} y={cY-14+i*18} textAnchor="middle" fill="#555" fontSize={9} fontWeight={700}>{t}</text>
+        ))}
+        {rightOnly.slice(0,4).map((t,i) => (
+          <text key={i} x={rCx+28} y={cY-18+i*18} textAnchor="middle" fill="#7c3aed" fontSize={9} fontWeight={600}>{t}</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ── Sentence Diagram (Reed-Kellogg) ───────────────────────────────────────────
+function SentenceDiagram({ v }) {
+  const { subject="", verb="", object="", subjectModifiers=[], verbModifiers=[], objectModifiers=[], prepPhrase } = v;
+  const W=340, H=160;
+  // Baseline: subject | verb | object
+  const baseY = 80;
+  const sX = 70, divX = 130, vX = 190, div2X = 250, oX = 310;
+
+  const hasPP = !!prepPhrase;
+  return (
+    <div style={{ margin:"0 0 18px", background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"10px 0 6px" }}>
+      <div style={{ textAlign:"center", fontSize:10, color:"#9A9490", letterSpacing:2, marginBottom:4, fontWeight:700, textTransform:"uppercase" }}>
+        Sentence Diagram
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow:"visible" }}>
+        {/* Main baseline */}
+        <line x1={20} y1={baseY} x2={object ? oX+30 : verb ? vX+40 : sX+40} y2={baseY} stroke="#2a2a2a" strokeWidth={2}/>
+        {/* Subject | verb divider */}
+        <line x1={divX} y1={baseY-22} x2={divX} y2={baseY+22} stroke="#2a2a2a" strokeWidth={2}/>
+        {/* verb | object divider (diagonal) */}
+        {object && <line x1={div2X} y1={baseY-16} x2={div2X+10} y2={baseY+16} stroke="#2a2a2a" strokeWidth={2}/>}
+
+        {/* Subject word */}
+        <text x={sX} y={baseY-8} textAnchor="middle" fill="#1E3A5F" fontSize={14} fontWeight={800}>{subject}</text>
+        {/* Verb word */}
+        {verb && <text x={vX} y={baseY-8} textAnchor="middle" fill="#1E3A5F" fontSize={14} fontWeight={800}>{verb}</text>}
+        {/* Object word */}
+        {object && <text x={oX} y={baseY-8} textAnchor="middle" fill="#1E3A5F" fontSize={14} fontWeight={800}>{object}</text>}
+
+        {/* Subject modifiers — diagonal lines descending left */}
+        {subjectModifiers.map((mod, i) => {
+          const startX = sX - 20 + i*22;
+          const endX = startX + 28;
+          return (
+            <g key={i}>
+              <line x1={startX} y1={baseY} x2={endX} y2={baseY+32} stroke="#1E3A5F" strokeWidth={1.5}/>
+              <text x={(startX+endX)/2-2} y={baseY+30} fill="#555" fontSize={10} fontWeight={600}
+                transform={`rotate(35,${(startX+endX)/2},${baseY+24})`}>{mod}</text>
+            </g>
+          );
+        })}
+
+        {/* Verb modifiers — diagonal lines descending */}
+        {verbModifiers.map((mod, i) => {
+          const startX = vX - 10 + i*20;
+          const endX = startX + 28;
+          return (
+            <g key={i}>
+              <line x1={startX} y1={baseY} x2={endX} y2={baseY+32} stroke="#c084fc" strokeWidth={1.5}/>
+              <text x={(startX+endX)/2-2} y={baseY+30} fill="#7c3aed" fontSize={10} fontWeight={600}
+                transform={`rotate(35,${(startX+endX)/2},${baseY+24})`}>{mod}</text>
+            </g>
+          );
+        })}
+
+        {/* Object modifiers */}
+        {objectModifiers.map((mod, i) => {
+          const startX = oX - 10 + i*20;
+          const endX = startX + 28;
+          return (
+            <g key={i}>
+              <line x1={startX} y1={baseY} x2={endX} y2={baseY+32} stroke="#60a5fa" strokeWidth={1.5}/>
+              <text x={(startX+endX)/2-2} y={baseY+30} fill="#2563eb" fontSize={10} fontWeight={600}
+                transform={`rotate(35,${(startX+endX)/2},${baseY+24})`}>{mod}</text>
+            </g>
+          );
+        })}
+
+        {/* Prepositional phrase — angled line from verb baseline */}
+        {hasPP && (
+          <g>
+            <line x1={vX+10} y1={baseY} x2={vX+20} y2={baseY+42} stroke="#f0a050" strokeWidth={1.5}/>
+            <line x1={vX+10} y1={baseY+42} x2={vX+90} y2={baseY+42} stroke="#f0a050" strokeWidth={1.5}/>
+            <text x={vX+24} y={baseY+38} fill="#D97706" fontSize={10} fontWeight={700}>{prepPhrase.prep}</text>
+            <line x1={vX+60} y1={baseY+42} x2={vX+60} y2={baseY+56} stroke="#2a2a2a" strokeWidth={1.5}/>
+            <text x={vX+75} y={baseY+52} fill="#1E3A5F" fontSize={11} fontWeight={800}>{prepPhrase.object}</text>
+            {(prepPhrase.objModifiers||[]).map((mod,i) => {
+              const sx = vX+60+i*18;
+              return (
+                <g key={i}>
+                  <line x1={sx} y1={baseY+56} x2={sx+22} y2={baseY+72} stroke="#555" strokeWidth={1}/>
+                  <text x={sx+4} y={baseY+70} fill="#555" fontSize={9}
+                    transform={`rotate(32,${sx+4},${baseY+66})`}>{mod}</text>
+                </g>
+              );
+            })}
+          </g>
+        )}
+
+        {/* Legend */}
+        <text x={10} y={H-6} fill="#9A9490" fontSize={8}>subject | predicate ⧸ object  — modifiers on diagonals</text>
+      </svg>
+    </div>
+  );
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────────
+function TimelineVisual({ v }) {
+  const { events=[], title="", highlightYear } = v;
+  if (!events.length) return null;
+  const W=320, H=100, padX=30, lineY=52;
+  const spacing = (W-padX*2) / Math.max(events.length-1, 1);
+  return (
+    <div style={{ margin:"0 0 18px" }}>
+      {title && <div style={{ textAlign:"center", fontSize:12, fontWeight:700, color:"#555", marginBottom:4 }}>{title}</div>}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {/* Timeline axis */}
+        <line x1={padX} y1={lineY} x2={W-padX} y2={lineY} stroke="#C0BCB8" strokeWidth={2.5}/>
+        <polygon points={`${W-padX+2},${lineY} ${W-padX-6},${lineY-4} ${W-padX-6},${lineY+4}`} fill="#C0BCB8"/>
+        {events.map((e, i) => {
+          const x = padX + i * spacing;
+          const isHi = highlightYear === e.year || highlightYear === String(e.year);
+          const above = i % 2 === 0;
+          return (
+            <g key={i}>
+              <line x1={x} y1={lineY-6} x2={x} y2={lineY+6} stroke={isHi?"#f0a050":"#1E3A5F"} strokeWidth={isHi?3:2}/>
+              <circle cx={x} cy={lineY} r={isHi?7:5} fill={isHi?"#f0a050":"#1E3A5F"} stroke="#fff" strokeWidth={1.5}/>
+              <text x={x} y={above ? lineY-16 : lineY+22} textAnchor="middle"
+                fill={isHi?"#D97706":"#1E3A5F"} fontSize={9} fontWeight={isHi?900:700}>{e.year}</text>
+              <text x={x} y={above ? lineY-27 : lineY+32} textAnchor="middle"
+                fill={isHi?"#D97706":"#555"} fontSize={8} fontWeight={isHi?700:400}
+                style={{ maxWidth:40 }}>{e.label?.slice(0,18)}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 // ─── Answer Option Tile ───────────────────────────────────────────────────────
 function OptionTile({ opt, selected, submitted, correct, onClick }) {
   const isSelected = opt === selected;
@@ -1011,7 +1486,34 @@ For topic "graphing", choose ONE format:
     "graphPoint": {"x": 3, "y": -2}
 
 For all other topics (fractions, decimals, etc.) omit the visual fields.
-Keep questions SHORT. Use × for multiply, ÷ for divide.`;
+Keep questions SHORT. Use × for multiply, ÷ for divide.
+
+VISUAL FIELD — include whenever a visual would help comprehension:
+Add a "visual" field to the question object with type + data. Types and formats:
+
+MATH VISUALS:
+"visual": {"type":"fraction_bar","numerator":3,"denominator":8,"highlight":[0,1,2]}
+"visual": {"type":"fraction_compare","fractions":[{"n":1,"d":2,"label":"1/2"},{"n":3,"d":8,"label":"3/8"}]}
+"visual": {"type":"geometry","shape":"triangle","sides":["5 cm","12 cm","13 cm"],"angles":["90°","67°","23°"],"labels":{"A":"top","B":"bottom-left","C":"bottom-right"}}
+"visual": {"type":"geometry","shape":"rectangle","sides":["8 m","3 m","8 m","3 m"]}
+"visual": {"type":"geometry","shape":"circle","sides":["6 cm"]}
+
+SCIENCE VISUALS:
+"visual": {"type":"bar_chart","title":"Plant Growth","bars":[{"label":"Week 1","value":3},{"label":"Week 2","value":7}],"yLabel":"Height (cm)","highlightBar":"Week 2"}
+"visual": {"type":"line_chart","title":"Temperature","points":[{"x":"Mon","y":20},{"x":"Tue","y":23},{"x":"Wed","y":19}],"yLabel":"°C"}
+"visual": {"type":"labeled_diagram","shape":"circle","title":"Animal Cell","labels":[{"id":"A","name":"Nucleus","angle":45,"radius":0.4},{"id":"B","name":"Cell Membrane","angle":180,"radius":0.9},{"id":"C","name":"Mitochondria","angle":270,"radius":0.55}],"askLabel":"B"}
+"visual": {"type":"labeled_diagram","shape":"layers","title":"Earth Layers","layers":[{"name":"Crust","color":"#8B7355","height":0.12},{"name":"Mantle","color":"#C1440E","height":0.38},{"name":"Outer Core","color":"#E8751A","height":0.3},{"name":"Inner Core","color":"#FFD700","height":0.2}],"askLabel":"Mantle"}
+"visual": {"type":"venn","leftLabel":"Mammals","rightLabel":"Fish","leftOnly":["Warm-blooded","Fur/hair"],"both":["Has vertebrae","Can swim"],"rightOnly":["Gills","Cold-blooded"]}
+
+GRAMMAR VISUALS:
+"visual": {"type":"sentence_diagram","subject":"fox","verb":"jumped","object":"fence","subjectModifiers":["The","quick","brown"],"verbModifiers":["quickly"],"objectModifiers":["the"],"prepPhrase":{"prep":"over","object":"fence","objModifiers":["the"]}}
+Use sentence diagrams for questions about parts of speech, subject/predicate, modifiers, prepositional phrases.
+
+SOCIAL STUDIES VISUALS:
+"visual": {"type":"timeline","title":"American Revolution","events":[{"year":"1775","label":"War begins"},{"year":"1776","label":"Declaration"},{"year":"1781","label":"Yorktown"},{"year":"1783","label":"Treaty of Paris"}],"highlightYear":"1776"}
+Use timelines for questions about historical sequence, cause and effect, dates.`;`
+
+RULES: Only include "visual" when it adds genuine clarity. Omit for purely factual recall questions.`;
 
 // Quick topic detection — lightweight call, returns {topicKey, topicName, description}
 async function detectHomeworkTopic(base64, mediaType) {
@@ -1097,13 +1599,20 @@ ${SCHEMA_INSTRUCTIONS}` });
       "standard 6th-grade difficulty — mix of recall and understanding",
       "challenging — application, comparison, deeper understanding",
     ][difficulty];
+    const sciVisualHint = subject?.id === "science"
+      ? "\n\nFor SCIENCE questions: include a 'visual' field whenever the question involves data, diagrams, cell parts, earth layers, ecosystems, or compare/contrast. Use bar_chart for data questions, labeled_diagram for anatomy/structure questions, venn for compare/contrast, line_chart for change-over-time. See VISUAL FIELD instructions in schema."
+      : subject?.id === "social_studies" || subject?.id === "history"
+      ? "\n\nFor SOCIAL STUDIES questions: include a 'visual' field for timeline questions (sequence of events, dates, cause/effect). Use the timeline type with 4-5 events, highlighting the relevant one. See VISUAL FIELD instructions in schema."
+      : subject?.id === "grammar" || subject?.id === "english"
+      ? "\n\nFor GRAMMAR questions: include a 'visual' field with type 'sentence_diagram' for questions about parts of speech, subject/predicate identification, modifiers, or prepositional phrases. Reed-Kellogg diagrams help dyslexic learners see sentence structure visually. See VISUAL FIELD instructions in schema."
+      : "";
     blocks.push({ type:"text", text:`You are a ${subject?.name || "subject"} tutor for a 6th grader with dyslexia.
 Generate exactly ${qCount} multiple-choice questions specifically about: "${hwTopic.topicName}"
 Subject area: ${subject?.name || "General"}
 Difficulty: ${diffDesc}.
 Dyslexia rules: SHORT clear question text, no clutter, unambiguous wording. Multiple choice only.
 Use topic string: "${hwTopic.topicKey}"
-Mix different aspects and sub-topics within "${hwTopic.topicName}" where appropriate.
+Mix different aspects and sub-topics within "${hwTopic.topicName}" where appropriate.${sciVisualHint}
 ${SCHEMA_INSTRUCTIONS}` });
   } else if (hwTopic && !base64) {
     // ── TOPIC BANK MODE: no image, use stored topic name/description ──────
@@ -1112,13 +1621,22 @@ ${SCHEMA_INSTRUCTIONS}` });
       "standard 6th-grade difficulty for this topic.",
       "30–50% HARDER — more steps, harder numbers, mixed sub-types.",
     ][difficulty];
+    const bankVisualHint = subject?.id === "math"
+      ? "\n\nFor MATH: include 'visual' for fraction questions (fraction_bar or fraction_compare), geometry (geometry shape), and data/statistics (bar_chart or line_chart)."
+      : subject?.id === "science"
+      ? "\n\nFor SCIENCE: include 'visual' for data questions (bar_chart/line_chart), diagrams (labeled_diagram), and comparisons (venn)."
+      : subject?.id === "grammar" || subject?.id === "english"
+      ? "\n\nFor GRAMMAR: include 'visual' with sentence_diagram for parts-of-speech and sentence-structure questions."
+      : subject?.id === "social_studies" || subject?.id === "history"
+      ? "\n\nFor SOCIAL STUDIES: include 'visual' with timeline for sequence/date questions."
+      : "";
     blocks.push({ type:"text", text:`You are a tutor for a 6th grader with dyslexia.
 Subject: ${subject?.name || "Math"}.
 Generate exactly ${qCount} practice problems on this topic: "${hwTopic.topicName}" — ${hwTopic.description}
 Difficulty: ${diffDesc}
 Dyslexia rules: SHORT question text, no clutter, unambiguous wording. Multiple choice only.
 Use topic string: "${hwTopic.topicKey}"
-Mix sub-types within the topic where appropriate.
+Mix sub-types within the topic where appropriate.${bankVisualHint}
 ${SCHEMA_INSTRUCTIONS}` });
   } else {
     // ── GENERAL MODE: standard three 6th-grade topics ─────────────────────
@@ -3067,6 +3585,11 @@ ${SCHEMA_INSTRUCTIONS}`;
                   correct={isCorrect}
                 />
               </div>
+            )}
+
+            {/* ── Universal visual renderer — all subjects ── */}
+            {prob.visual && (
+              <QuestionVisual visual={prob.visual} submitted={submitted} isCorrect={isCorrect} />
             )}
 
             {/* Options — with progressive reveal */}
