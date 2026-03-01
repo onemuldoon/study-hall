@@ -74,6 +74,7 @@ const SUBJECTS = [
     bg: "#EFF6FF",
     border: "#BFDBFE",
     tagline: "Parts of Speech · Punctuation · Writing",
+    supportsTextTopic: true,
     generalLabel: "Grammar · Punctuation · Style",
     generalPrompt: `Generate exactly 8 grammar and language arts questions for a 6th grader covering: parts of speech (nouns, verbs, adjectives, adverbs), sentence structure (complete sentences, fragments, run-ons), and punctuation/capitalization. Mix all three areas. Write SHORT, clear questions.`,
     insightContext: "6th grade grammar and ELA",
@@ -491,6 +492,78 @@ async function saveSession(session, subjectId, username) {
 }
 async function clearSessions(subjectId, username) { try { await storage.delete(sessionsKey(subjectId, username)); } catch {} }
 
+// ─── Spaced Repetition System (SM-2 algorithm) ──────────────────────────────
+// Each card: { id, subjectId, topicKey, question, correctAnswer, lastSeen,
+//              interval, easeFactor, dueDate, totalReps, streak }
+function srsKey(username) { return `${userPrefix(username)}srs-cards`; }
+async function loadSrsCards(username) {
+  try { const r = await storage.get(srsKey(username)); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveSrsCards(cards, username) {
+  try { await storage.set(srsKey(username), JSON.stringify(cards)); } catch {}
+}
+
+// SM-2 update: quality 0-5 (0-2 = wrong, 3-5 = correct with varying confidence)
+function sm2Update(card, quality) {
+  const now = new Date().toISOString().slice(0,10);
+  let { interval = 1, easeFactor = 2.5, totalReps = 0, streak = 0 } = card;
+  if (quality >= 3) {
+    // Correct answer
+    if (totalReps === 0) interval = 1;
+    else if (totalReps === 1) interval = 6;
+    else interval = Math.round(interval * easeFactor);
+    easeFactor = Math.max(1.3, easeFactor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    streak = (streak || 0) + 1;
+    totalReps = (totalReps || 0) + 1;
+  } else {
+    // Wrong answer — reset
+    interval = 1;
+    easeFactor = Math.max(1.3, easeFactor - 0.2);
+    streak = 0;
+    totalReps = 0;
+  }
+  const dueDate = new Date(Date.now() + interval * 86400000).toISOString().slice(0,10);
+  return { ...card, interval, easeFactor, dueDate, totalReps, streak, lastSeen: now };
+}
+
+// Add new cards from a completed session log
+async function ingestSessionToSrs(log, subjectId, topicKey, username) {
+  const cards = await loadSrsCards(username);
+  const cardMap = Object.fromEntries(cards.map(c => [c.id, c]));
+  const updated = [...cards];
+  for (const entry of log) {
+    const id = `${subjectId}__${btoa(entry.question).slice(0,32).replace(/[^a-z0-9]/gi,'_')}`;
+    const quality = entry.ok ? 4 : 1;
+    if (cardMap[id]) {
+      const idx = updated.findIndex(c => c.id === id);
+      updated[idx] = sm2Update(updated[idx], quality);
+    } else {
+      const newCard = { id, subjectId, topicKey, question: entry.question,
+        correctAnswer: entry.correct, interval: 1, easeFactor: 2.5,
+        dueDate: new Date(Date.now() + (entry.ok ? 86400000 : 0)).toISOString().slice(0,10),
+        totalReps: entry.ok ? 1 : 0, streak: entry.ok ? 1 : 0,
+        lastSeen: new Date().toISOString().slice(0,10) };
+      updated.push(newCard);
+    }
+  }
+  // Keep max 500 cards
+  updated.sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
+  await saveSrsCards(updated.slice(0, 500), username);
+}
+
+function getDueCards(cards, subjectId, limit = 8) {
+  const today = new Date().toISOString().slice(0,10);
+  return cards
+    .filter(c => c.subjectId === subjectId && c.dueDate <= today)
+    .sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate))
+    .slice(0, limit);
+}
+function getDueCount(cards, subjectId) {
+  const today = new Date().toISOString().slice(0,10);
+  return cards.filter(c => c.subjectId === subjectId && c.dueDate <= today).length;
+}
+
+
 // ─── Stats storage (streak, sessions this week) ───────────────────────────────
 function statsKey(username) { return `${userPrefix(username)}stats`; }
 async function loadStats(username) {
@@ -675,11 +748,12 @@ ${SCHEMA_INSTRUCTIONS}` });
       "standard analysis — mix of comprehension and basic literary analysis",
       "deeper analysis — themes, symbolism, character motivation, literary devices",
     ][difficulty];
-    blocks.push({ type:"text", text:`You are an English literature tutor for a 6th grader with dyslexia.
-Generate exactly 8 multiple-choice questions about the book: "${hwTopic.bookTitle}"${hwTopic.bookAuthor ? ` by ${hwTopic.bookAuthor}` : ""}.
+    const chapterScope = hwTopic.bookChapter ? `\nFocus ONLY on: ${hwTopic.bookChapter}. Do not ask about events or characters outside this scope.` : "";
+    blocks.push({ type:"text", text:`You are an English literature tutor for a 6th grader.
+Generate exactly 8 multiple-choice questions about: "${hwTopic.bookTitle}"${hwTopic.bookAuthor ? ` by ${hwTopic.bookAuthor}` : ""}.${chapterScope}
 Cover a mix of: plot comprehension (key events, sequence, cause and effect), character analysis (motivations, relationships, development), and themes/literary devices (symbolism, foreshadowing, author's message).
 Difficulty: ${diffDesc}.
-Dyslexia rules: SHORT clear question text, unambiguous wording. All questions must be specific to this book.
+Keep questions SHORT and clear. All questions must be specific to this book${hwTopic.bookChapter ? " and chapter scope" : ""}.
 Use topic string: "${hwTopic.topicKey}"
 ${SCHEMA_INSTRUCTIONS}` });
   } else if (hwTopic?._isTextTopic) {
@@ -965,7 +1039,10 @@ export default function App() {
   const [hwTopic, setHwTopic] = useState(null);    // {topicKey, topicName, description}
   const [hwDetecting, setHwDetecting] = useState(false);
   const [textTopicInput, setTextTopicInput] = useState("");   // theme text input
+  const [srsCards, setSrsCards] = useState([]);                // all SRS cards for user
+  const [srsMode, setSrsMode] = useState(false);               // currently in SRS review mode
   const [bookTitle, setBookTitle] = useState("");             // book title for English
+  const [bookChapter, setBookChapter] = useState("");         // chapter or chapter range
   const [bookAuthor, setBookAuthor] = useState("");           // book author for English
   const [showTextInput, setShowTextInput] = useState(false);  // expand text input panel
 
@@ -1004,6 +1081,7 @@ export default function App() {
     if (!subject || !currentUser) return;
     loadStats(currentUser.username).then(setHomeStats);
     loadTopicBank(subject.id, currentUser.username).then(setTopicBank);
+    loadSrsCards(currentUser.username).then(setSrsCards);
     loadSessions(subject.id, currentUser.username).then(sessions => {
       const recent = sessions.slice(0, 10);
       const missed = new Set();
@@ -1155,6 +1233,9 @@ export default function App() {
     if (screen==="complete"&&log.length>0&&!sessionSavedRef.current) {
       sessionSavedRef.current = true;
       const sessionPct = Math.round((log.filter(l=>l.ok).length / log.length) * 100);
+      // Ingest session questions into SRS system
+      ingestSessionToSrs(log, subject?.id||"math", hwTopic?.topicKey||"general", currentUser?.username)
+        .then(() => loadSrsCards(currentUser?.username).then(setSrsCards));
       saveSession({ id:Date.now().toString(), date:new Date().toISOString(), subject:subject?.id||"math", subjectName:subject?.name||"Math", timeSpent:timeTotal>0?Math.min(timeUsed,timeTotal):timeUsed, timed:timeTotal>0, difficulty, total:log.length, correct:log.filter((l)=>l.ok).length, log:log.map(({topic,ok,question,selected,correct})=>({topic,ok,question,selected,correct})) }, subject?.id, currentUser?.username);
       updateStats(sessionPct, currentUser?.username).then(stats => {
         setHomeStats(stats);
@@ -1175,6 +1256,24 @@ export default function App() {
     try { setInsights(await generateInsights(currentLog)); }
     catch(err) { setInsightsError(err.message||"Could not generate insights."); }
     finally { setInsightsLoading(false); }
+  };
+
+  const startSrsReview = () => {
+    const due = getDueCards(srsCards, subject?.id||"math", 8);
+    if (due.length === 0) return;
+    setSrsMode(true);
+    // Build a fake hwTopic for SRS review
+    const srsTopic = {
+      topicKey: "srs_review",
+      topicName: `Review: ${due.length} Due Card${due.length>1?"s":""}`,
+      description: "Spaced repetition review",
+      _isSrsReview: true,
+      dueCards: due,
+    };
+    setHwTopic(srsTopic);
+    setHwFile(null);
+    setDifficulty(1);
+    setScreen("confirm");
   };
 
   const startMix = () => {
@@ -1256,16 +1355,19 @@ export default function App() {
       if (!bookTitle.trim()) return;
       const topicName = bookTitle.trim();
       const author = bookAuthor.trim();
+      const chapter = bookChapter.trim();
+      const chapterSuffix = chapter ? ` — ${chapter}` : "";
       const topic = {
-        topicKey: topicName.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40),
-        topicName,
-        description: author ? `By ${author}` : "Literature study",
+        topicKey: (topicName + (chapter ? "_" + chapter : "")).toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40),
+        topicName: topicName + chapterSuffix,
+        description: author ? `By ${author}${chapter ? " · " + chapter : ""}` : chapter || "Literature study",
         _isBook: true,
         bookTitle: topicName,
         bookAuthor: author,
+        bookChapter: chapter,
       };
       setHwTopic(topic); setHwFile(null); setDifficulty(1);
-      setShowTextInput(false); setBookTitle(""); setBookAuthor("");
+      setShowTextInput(false); setBookTitle(""); setBookChapter(""); setBookAuthor("");
       setScreen("confirm");
     } else if (subject?.supportsTextTopic) {
       if (!textTopicInput.trim()) return;
@@ -1522,6 +1624,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     setShowTextInput(false);
                     setTextTopicInput("");
                     setBookTitle("");
+                    setBookChapter("");
                     setBookAuthor("");
                     setScreen("upload");
                   }}
@@ -1742,13 +1845,20 @@ ${SCHEMA_INSTRUCTIONS}`;
                   </button>
                   {showTextInput && (
                     <div style={{ background:"#F8F6F3", padding:"14px 16px", borderTop:"1px solid #E2DDD8", animation:"fade-in .15s ease" }}>
+                      <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, marginBottom:5 }}>BOOK TITLE *</div>
                       <input value={bookTitle} onChange={e=>setBookTitle(e.target.value)}
-                        placeholder="Book title (e.g. The Hobbit)"
-                        style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:8, boxSizing:"border-box" }}
-                        onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
-                      <input value={bookAuthor} onChange={e=>setBookAuthor(e.target.value)}
-                        placeholder="Author (optional)"
+                        placeholder="e.g. The Magician's Nephew"
                         style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
+                        onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
+                      <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, marginBottom:5 }}>CHAPTER(S)</div>
+                      <input value={bookChapter} onChange={e=>setBookChapter(e.target.value)}
+                        placeholder="e.g. Chapter 1, Chapters 1-4, Part 2"
+                        style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
+                        onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
+                      <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, marginBottom:5 }}>AUTHOR</div>
+                      <input value={bookAuthor} onChange={e=>setBookAuthor(e.target.value)}
+                        placeholder="e.g. C.S. Lewis (optional)"
+                        style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:12, boxSizing:"border-box" }}
                         onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
                       <button onClick={handleTextTopicSubmit} disabled={!bookTitle.trim()}
                         style={{ width:"100%", padding:"10px", background:bookTitle.trim()?"#a78bfa":"#F0EEE9", border:"none", borderRadius:8, color:bookTitle.trim()?"#fff":"#9A9490", fontSize:13, fontWeight:800, cursor:bookTitle.trim()?"pointer":"default" }}>
@@ -1796,6 +1906,19 @@ ${SCHEMA_INSTRUCTIONS}`;
               onChange={(e)=>{if(e.target.files[0])handleFile(e.target.files[0]);}} />
 
             <div style={{ borderTop:"1px solid #E2DDD8", paddingTop:14, display:"flex", flexDirection:"column", gap:8 }}>
+              {(() => { const dueCount = getDueCount(srsCards, subject?.id||"math"); return dueCount > 0 ? (
+                <button className="ghost-hover" onClick={startSrsReview}
+                  style={{ width:"100%", padding:"13px 16px", background:"#EEF3FA", border:"1.5px solid #1E3A5F", borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"all .15s" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <span style={{ fontSize:18 }}>🔁</span>
+                    <div style={{ textAlign:"left" }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:"#1E3A5F", letterSpacing:1 }}>SPACED REVIEW</div>
+                      <div style={{ fontSize:11, color:"#9A9490" }}>Reinforce what you're about to forget</div>
+                    </div>
+                  </div>
+                  <span style={{ background:"#1E3A5F", color:"white", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:800 }}>{dueCount} due</span>
+                </button>
+              ) : null; })()}
               {weakSpotsCount > 0 && (
                 <button className="ghost-hover" style={{ ...S.ghostBtn, borderColor:"#3a1a00", color:"#7a3a00" }}
                   onClick={handleWeakSpots}>
@@ -1827,7 +1950,7 @@ ${SCHEMA_INSTRUCTIONS}`;
         {/* ── CONFIRM (homework topic detected) ── */}
         {screen === "confirm" && (
           <div style={{ ...S.card, animation:"fade-in .3s ease" }}>
-            <div style={S.logo}>{hwTopic?._isGeneral ? "Ready to Practice" : hwTopic?._isMix ? "Mix Session" : hwTopic?._isBook ? "Book Study" : hwTopic?._isTextTopic ? "Custom Topic" : "Homework Uploaded"}</div>
+            <div style={S.logo}>{hwTopic?._isGeneral ? "Ready to Practice" : hwTopic?._isMix ? "Mix Session" : hwTopic?._isSrsReview ? "Spaced Review" : hwTopic?._isBook ? "Book Study" : hwTopic?._isTextTopic ? "Custom Topic" : "Homework Uploaded"}</div>
 
             {hwDetecting ? (
               <div style={{ textAlign:"center", padding:"32px 0" }}>
@@ -2066,7 +2189,13 @@ ${SCHEMA_INSTRUCTIONS}`;
               {log.some((l)=>!l.ok) && <button style={S.accentBtn} onClick={()=>handleViewInsights(log)}>Learning Opportunities →</button>}
               <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Go Again</button>
             </div>
-            <div style={{ marginTop:10 }}>
+            <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8 }}>
+              {(() => { const dueCount = getDueCount(srsCards, subject?.id||"math"); return dueCount > 0 ? (
+                <button className="ghost-hover" onClick={()=>{clearTimer(); startSrsReview();}}
+                  style={{ ...S.ghostBtn, background:"#EEF3FA", borderColor:"#1E3A5F33", color:"#1E3A5F", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                  🔁 {dueCount} card{dueCount>1?"s":""} due for review
+                </button>
+              ) : null; })()}
               <button className="ghost-hover" style={S.ghostBtn} onClick={()=>{clearTimer();setScreen("subjects");}}>Home</button>
             </div>
           </div>
