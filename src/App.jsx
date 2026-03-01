@@ -1616,17 +1616,17 @@ ${SCHEMA_INSTRUCTIONS}`;
             </div>
 
             {/* Number line for pos/neg — math only */}
-            {subject?.hasMathVisuals && prob.topic === "positive_negative" && prob.numberLineData && (
+            {subject?.hasMathVisuals && prob.topic?.includes("positive_negative") && prob.numberLineData && (
               <NumberLine nld={prob.numberLineData} submitted={submitted} isCorrect={isCorrect} />
             )}
 
             {/* Step reveal for PEMDAS — math only */}
-            {subject?.hasMathVisuals && prob.topic === "order_of_operations" && prob.steps && (
+            {subject?.hasMathVisuals && (prob.topic?.includes("order_of_operations") || prob.topic?.includes("pemdas")) && prob.steps && (
               <StepReveal steps={prob.steps} submitted={submitted} />
             )}
 
             {/* Coord grid for graphing — math only */}
-            {subject?.hasMathVisuals && prob.topic === "graphing" && (prob.graphPoints || prob.graphPoint) && (
+            {subject?.hasMathVisuals && prob.topic?.toLowerCase().includes("graph") && (prob.graphPoints || prob.graphPoint) && (
               <div style={S.gridWrap}>
                 <CoordGrid
                   point={prob.graphPoints ? null : prob.graphPoint}
