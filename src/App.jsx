@@ -126,9 +126,9 @@ const SUBJECTS = [
   },
 ];
 
-const NEG_COLOR = "#ff6b6b";   // negative sign color
-const POS_COLOR = "#4ade80";   // positive sign color
-const NEU_COLOR = "#f0f0f0";   // neutral number color
+const NEG_COLOR = "#dc2626";   // negative sign color
+const POS_COLOR = "#16a34a";   // positive sign color
+const NEU_COLOR = "#1e3a5f";   // neutral number color
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(s) { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, "0")}`; }
@@ -324,7 +324,7 @@ function CoordGrid({ point, graphPoints, submitted, correct }) {
     : point ? [{ label: null, x: point.x, y: point.y }] : [];
 
   return (
-    <svg width={size} height={size} style={{ display: "block", background: "#0d0d0d", border: "1.5px solid #2a2a2a", borderRadius: 8 }}>
+    <svg width={size} height={size} style={{ display: "block", background: "#F8F6F3", border: "1.5px solid #E2DDD8", borderRadius: 8 }}>
       {/* Grid lines + tick labels */}
       {[-4,-3,-2,-1,0,1,2,3,4].map((i) => (
         <g key={i}>
@@ -365,13 +365,13 @@ function CoordGrid({ point, graphPoints, submitted, correct }) {
 function OptionTile({ opt, selected, submitted, correct, onClick }) {
   const isSelected = opt === selected;
   const isCorrect = opt === correct;
-  let bg = "#0e0e0e", border = "#1e1e1e", glow = "none";
+  let bg = "#F8F6F3", border = "#E2DDD8", glow = "none";
   if (!submitted) {
-    if (isSelected) { bg = "#141800"; border = "#E8FF45"; glow = "0 0 0 2px #E8FF4530"; }
+    if (isSelected) { bg = "#EEF3FA"; border = "#1E3A5F"; glow = "0 0 0 2px #1E3A5F20"; }
   } else {
-    if (isCorrect) { bg = "#0b1f0b"; border = POS_COLOR; glow = `0 0 0 2px ${POS_COLOR}30`; }
-    else if (isSelected) { bg = "#1f0b0b"; border = NEG_COLOR; glow = `0 0 0 2px ${NEG_COLOR}30`; }
-    else { bg = "#090909"; border = "#111"; }
+    if (isCorrect) { bg = "#F0FDF4"; border = POS_COLOR; glow = `0 0 0 2px ${POS_COLOR}20`; }
+    else if (isSelected) { bg = "#FEF2F2"; border = NEG_COLOR; glow = `0 0 0 2px ${NEG_COLOR}20`; }
+    else { bg = "#FAFAF9"; border = "#E2DDD8"; }
   }
   return (
     <button
@@ -1321,50 +1321,50 @@ ${SCHEMA_INSTRUCTIONS}`;
 
   // ─── Styles ──────────────────────────────────────────────────────────────────
   const S = {
-    page: { minHeight:"100vh", background:"#070707", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 16px", fontFamily:"'Atkinson Hyperlegible', 'Lexend', sans-serif" },
-    card: { background:"#0f0f0f", border:"1px solid #1f1f1f", borderRadius:14, padding:"36px 32px", maxWidth:560, width:"100%" },
-    wideCard: { background:"#0f0f0f", border:"1px solid #1f1f1f", borderRadius:14, padding:"36px 32px", maxWidth:680, width:"100%" },
-    logo: { fontSize:11, letterSpacing:6, color:"#333", textTransform:"uppercase", marginBottom:8 },
-    h1: { fontSize:32, fontWeight:800, color:"#E8FF45", letterSpacing:-1, marginBottom:4 },
-    sub: { fontSize:12, color:"#3a3a3a", letterSpacing:2, textTransform:"uppercase", marginBottom:28 },
-    sectionLabel: { fontSize:11, color:"#2f2f2f", letterSpacing:2, textTransform:"uppercase", marginBottom:10 },
+    page: { minHeight:"100vh", background:"#F0EEE9", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 16px", fontFamily:"'Atkinson Hyperlegible', 'Lexend', sans-serif" },
+    card: { background:"#FFFFFF", border:"1px solid #E2DDD8", borderRadius:14, padding:"36px 32px", maxWidth:560, width:"100%", boxShadow:"0 2px 12px rgba(0,0,0,0.06)" },
+    wideCard: { background:"#FFFFFF", border:"1px solid #E2DDD8", borderRadius:14, padding:"36px 32px", maxWidth:680, width:"100%", boxShadow:"0 2px 12px rgba(0,0,0,0.06)" },
+    logo: { fontSize:11, letterSpacing:6, color:"#9A9490", textTransform:"uppercase", marginBottom:8 },
+    h1: { fontSize:32, fontWeight:800, color:"#1E3A5F", letterSpacing:-1, marginBottom:4 },
+    sub: { fontSize:12, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginBottom:28 },
+    sectionLabel: { fontSize:11, color:"#9A9490", letterSpacing:2, textTransform:"uppercase", marginBottom:10 },
     row: { display:"flex", gap:8, marginBottom:24 },
-    segBtn: (active) => ({ flex:1, padding:"10px 8px", background:active?"#E8FF4510":"transparent", border:active?"1.5px solid #E8FF45":"1.5px solid #1f1f1f", borderRadius:7, color:active?"#E8FF45":"#333", fontSize:13, fontWeight:700, cursor:"pointer", letterSpacing:1, textTransform:"uppercase" }),
-    dropzone: (over) => ({ border:over?"2px solid #E8FF4566":"2px dashed #1f1f1f", borderRadius:10, padding:"40px 20px", textAlign:"center", cursor:"pointer", background:over?"#E8FF450a":"transparent", transition:"all .2s", marginBottom:12 }),
-    dropTitle: { fontSize:16, fontWeight:700, color:"#ccc", marginBottom:5 },
-    dropSub: { fontSize:13, color:"#333" },
-    divider: { textAlign:"center", color:"#1a1a1a", fontSize:13, margin:"10px 0" },
-    ghostBtn: { width:"100%", padding:"13px", background:"transparent", border:"1.5px solid #1f1f1f", borderRadius:8, color:"#3a3a3a", fontSize:14, fontWeight:700, cursor:"pointer", letterSpacing:1, textTransform:"uppercase", marginBottom:0 },
-    err: { background:"#1f0808", border:"1px solid #4a1414", borderRadius:7, padding:14, marginTop:14, color:"#f87171", fontSize:12, fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.6 },
-    timerBar: { background:"#141414", borderRadius:4, height:4, marginBottom:6, overflow:"hidden" },
-    timerFill: (p,low) => ({ height:"100%", width:`${p}%`, background:low?NEG_COLOR:"#E8FF45", borderRadius:4, transition:"width 1s linear, background .5s" }),
-    timerText: (low) => ({ fontSize:20, fontWeight:800, fontFamily:"monospace", color:low?NEG_COLOR:"#E8FF45", letterSpacing:2, textAlign:"right", marginBottom:12 }),
+    segBtn: (active) => ({ flex:1, padding:"10px 8px", background:active?"#1E3A5F":"transparent", border:active?"1.5px solid #1E3A5F":"1.5px solid #E2DDD8", borderRadius:7, color:active?"#FFFFFF":"#9A9490", fontSize:13, fontWeight:700, cursor:"pointer", letterSpacing:1, textTransform:"uppercase" }),
+    dropzone: (over) => ({ border:over?"2px solid #1E3A5F":"2px dashed #D0CCC8", borderRadius:10, padding:"40px 20px", textAlign:"center", cursor:"pointer", background:over?"#1E3A5F0a":"transparent", transition:"all .2s", marginBottom:12 }),
+    dropTitle: { fontSize:16, fontWeight:700, color:"#3A3530", marginBottom:5 },
+    dropSub: { fontSize:13, color:"#9A9490" },
+    divider: { textAlign:"center", color:"#D0CCC8", fontSize:13, margin:"10px 0" },
+    ghostBtn: { width:"100%", padding:"13px", background:"transparent", border:"1.5px solid #E2DDD8", borderRadius:8, color:"#6A6560", fontSize:14, fontWeight:700, cursor:"pointer", letterSpacing:1, textTransform:"uppercase", marginBottom:0 },
+    err: { background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:7, padding:14, marginTop:14, color:"#dc2626", fontSize:12, fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.6 },
+    timerBar: { background:"#F0EEE9", borderRadius:4, height:4, marginBottom:6, overflow:"hidden" },
+    timerFill: (p,low) => ({ height:"100%", width:`${p}%`, background:low?NEG_COLOR:"#1E3A5F", borderRadius:4, transition:"width 1s linear, background .5s" }),
+    timerText: (low) => ({ fontSize:20, fontWeight:800, fontFamily:"monospace", color:low?NEG_COLOR:"#1E3A5F", letterSpacing:2, textAlign:"right", marginBottom:12 }),
     topicMeta: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 },
     pill: (topic) => ({ display:"inline-block", padding:"4px 12px", background:topicColor(topic)+"18", border:`1px solid ${topicColor(topic)}33`, borderRadius:20, color:topicColor(topic)||"#888", fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase" }),
-    numMeta: { fontSize:12, color:"#2a2a2a", fontFamily:"monospace" },
-    prog: { background:"#141414", borderRadius:4, height:3, marginBottom:18, overflow:"hidden" },
-    progFill: (p) => ({ height:"100%", width:`${p}%`, background:"#2a2a2a", borderRadius:4, transition:"width .4s ease" }),
+    numMeta: { fontSize:12, color:"#9A9490", fontFamily:"monospace" },
+    prog: { background:"#F0EEE9", borderRadius:4, height:3, marginBottom:18, overflow:"hidden" },
+    progFill: (p) => ({ height:"100%", width:`${p}%`, background:"#1E3A5F", borderRadius:4, transition:"width .4s ease" }),
     statsRow: { display:"flex", gap:16, marginBottom:18, alignItems:"center" },
-    scoreLabel: { fontSize:13, color:"#2f2f2f" },
-    scoreVal: { color:"#E8FF45", fontWeight:800 },
-    streakBadge: { fontSize:13, color:"#E8FF45", fontWeight:700 },
-    diffBadge: { marginLeft:"auto", fontSize:10, color:"#1f1f1f", letterSpacing:2, textTransform:"uppercase", fontFamily:"monospace" },
+    scoreLabel: { fontSize:13, color:"#6A6560" },
+    scoreVal: { color:"#1E3A5F", fontWeight:800 },
+    streakBadge: { fontSize:13, color:"#1E3A5F", fontWeight:700 },
+    diffBadge: { marginLeft:"auto", fontSize:10, color:"#C0BCB8", letterSpacing:2, textTransform:"uppercase", fontFamily:"monospace" },
     questionBox: { marginBottom:24, padding:"20px 0 4px" },
     gridWrap: { display:"flex", justifyContent:"center", marginBottom:18 },
-    tipBox: { background:"#141000", border:"1px solid #3a3000", borderRadius:8, padding:"14px 16px", marginTop:12 },
-    tipTitle: { fontSize:10, color:"#7a6a00", letterSpacing:3, textTransform:"uppercase", marginBottom:5, fontWeight:800 },
-    tipText: { fontSize:15, color:"#ffd44d", lineHeight:1.75, fontWeight:600 },
-    expl: { fontSize:13, color:"#6a5a00", marginTop:6, lineHeight:1.6 },
-    correctBox: { background:"#0b1a0b", border:`1px solid ${POS_COLOR}44`, borderRadius:8, padding:14, marginTop:12, color:POS_COLOR, fontSize:15, fontWeight:700 },
+    tipBox: { background:"#FFFBEB", border:"1px solid #FDE68A", borderRadius:8, padding:"14px 16px", marginTop:12 },
+    tipTitle: { fontSize:10, color:"#92400E", letterSpacing:3, textTransform:"uppercase", marginBottom:5, fontWeight:800 },
+    tipText: { fontSize:15, color:"#78350F", lineHeight:1.75, fontWeight:600 },
+    expl: { fontSize:13, color:"#92400E", marginTop:6, lineHeight:1.6 },
+    correctBox: { background:"#F0FDF4", border:`1px solid ${POS_COLOR}66`, borderRadius:8, padding:14, marginTop:12, color:POS_COLOR, fontSize:15, fontWeight:700 },
     btnRow: { display:"flex", gap:10, marginTop:18 },
-    primaryBtn: (dis) => ({ flex:1, padding:"16px", background:dis?"#141400":"#E8FF45", border:"none", borderRadius:8, color:dis?"#333300":"#000", fontSize:16, fontWeight:800, cursor:dis?"default":"pointer" }),
-    accentBtn: { flex:1, padding:"16px", background:"transparent", border:`1.5px solid #E8FF45`, borderRadius:8, color:"#E8FF45", fontSize:16, fontWeight:800, cursor:"pointer" },
-    bigScore: { fontSize:60, fontWeight:800, color:"#E8FF45", fontFamily:"monospace", marginBottom:4 },
-    bigDenom: { fontSize:20, color:"#333", fontFamily:"monospace", marginBottom:6 },
-    timeStat: { fontSize:12, color:"#2a2a2a", fontFamily:"monospace", marginBottom:20 },
-    topicRow: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 0", borderBottom:"1px solid #141414" },
+    primaryBtn: (dis) => ({ flex:1, padding:"16px", background:dis?"#E2DDD8":"#1E3A5F", border:"none", borderRadius:8, color:dis?"#9A9490":"#FFFFFF", fontSize:16, fontWeight:800, cursor:dis?"default":"pointer" }),
+    accentBtn: { flex:1, padding:"16px", background:"transparent", border:"1.5px solid #1E3A5F", borderRadius:8, color:"#1E3A5F", fontSize:16, fontWeight:800, cursor:"pointer" },
+    bigScore: { fontSize:60, fontWeight:800, color:"#1E3A5F", fontFamily:"monospace", marginBottom:4 },
+    bigDenom: { fontSize:20, color:"#9A9490", fontFamily:"monospace", marginBottom:6 },
+    timeStat: { fontSize:12, color:"#9A9490", fontFamily:"monospace", marginBottom:20 },
+    topicRow: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 0", borderBottom:"1px solid #F0EEE9" },
     topicCount: (ok,tot) => ({ fontFamily:"monospace", color:ok===tot?POS_COLOR:NEG_COLOR, fontSize:17, fontWeight:800 }),
-    msg: { color:"#333", fontSize:14, lineHeight:1.9, marginBottom:24, marginTop:14 },
+    msg: { color:"#6A6560", fontSize:14, lineHeight:1.9, marginBottom:24, marginTop:14 },
   };
 
   return (
@@ -1372,16 +1372,17 @@ ${SCHEMA_INSTRUCTIONS}`;
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Lexend:wght@400;700;800&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #070707; }
+        body { background: #F0EEE9; }
         button { font-family: 'Atkinson Hyperlegible', 'Lexend', sans-serif; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.55} }
         @keyframes fade-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.07)} 100%{transform:scale(1)} }
-        .ghost-hover:hover { border-color: #2a2a2a !important; color: #555 !important; }
-        .session-row:hover { background: #141414 !important; }
-        input:focus { border-color: #E8FF4588 !important; }
-        input::placeholder { color: #333; }
+        .ghost-hover:hover { border-color: #D0CCC8 !important; color: #4A4540 !important; }
+        .session-row:hover { background: #F8F6F3 !important; }
+        input:focus { border-color: #1E3A5F88 !important; outline: none; }
+        input::placeholder { color: #B0ACA8; }
+        input { background: #F8F6F3; border: 1.5px solid #E2DDD8; color: #1A1714; }
       `}</style>
       <div style={S.page}>
 
