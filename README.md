@@ -2,7 +2,7 @@
 
 A multi-subject, multi-student AI-powered study app.
 
-## Setup (already done for you — just deploy)
+## Setup
 
 ### 1. Supabase
 Run `SUPABASE_SETUP.sql` in your Supabase SQL editor.
