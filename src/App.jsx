@@ -112,6 +112,289 @@ function SubjectIcon({ id, size = 24, color, strokeWidth = 1.8 }) {
   }
 }
 
+
+// ─── Admin Starter Packs ──────────────────────────────────────────────────────
+// Pre-seeded library topics per subject, based on known curriculum
+const STARTER_PACKS = {
+  math: [
+    {
+      topicKey: "positive_negative_numbers",
+      topicName: "Positive & Negative Numbers",
+      description: "Adding, subtracting, and comparing integers on a number line",
+      gradeLevel: "6th Grade · Saxon Math 7/6",
+      difficultyNotes: "Students add and subtract integers with values between −20 and +20. They use a number line to visualise movement. Problems involve simple one-step operations: −7 + 4, 5 − 9, −3 − 6. No multiplication or division of negatives yet. No parentheses. Answer always fits on a −20 to +20 number line.",
+      exemplarQuestions: [
+        { question: "−4 + 7 = ?", answer: "3" },
+        { question: "8 − 12 = ?", answer: "−4" },
+        { question: "Which is greater: −5 or −2?", answer: "−2" },
+      ]
+    },
+    {
+      topicKey: "order_of_operations_pemdas",
+      topicName: "Order of Operations (PEMDAS)",
+      description: "Evaluating expressions with multiple operations in the correct order",
+      gradeLevel: "6th Grade · Saxon Math 7/6",
+      difficultyNotes: "Students evaluate expressions with 3–5 operations using whole numbers only (no variables, no negatives inside expressions). Exponents limited to squared numbers up to 5². Parentheses appear in about half the problems. Multiplication and division use simple single-digit multipliers. Example difficulty: 3 + 4 × 2, (6 − 2)² + 1, 18 ÷ 3 + 5 × 2.",
+      exemplarQuestions: [
+        { question: "3 + 4 × 2 = ?", answer: "11" },
+        { question: "(8 − 3) × 2 + 1 = ?", answer: "11" },
+        { question: "2² + 3 × 4 − 5 = ?", answer: "11" },
+      ]
+    },
+    {
+      topicKey: "fractions_operations",
+      topicName: "Fractions: Add, Subtract & Compare",
+      description: "Adding and subtracting fractions with unlike denominators; comparing fractions",
+      gradeLevel: "6th Grade · Saxon Math 7/6",
+      difficultyNotes: "Students add and subtract fractions with unlike denominators up to 12. They find the LCD, convert, and simplify. Mixed numbers appear in some problems but improper fractions should be converted back to mixed numbers in the answer. Comparisons use >, <, or = with fractions and mixed numbers. No complex multi-step word problems — just the operation itself.",
+      exemplarQuestions: [
+        { question: "1/2 + 3/8 = ?", answer: "7/8" },
+        { question: "3/4 − 1/6 = ?", answer: "7/12" },
+        { question: "Which is greater: 3/5 or 5/8?", answer: "5/8" },
+      ]
+    },
+    {
+      topicKey: "coordinate_graphing",
+      topicName: "Graphing on the Coordinate Plane",
+      description: "Plotting points, identifying quadrants, and reading coordinates",
+      gradeLevel: "6th Grade · Saxon Math 7/6",
+      difficultyNotes: "Students plot and identify points on a standard coordinate plane (x and y from −5 to +5). Questions ask which quadrant a point is in, what the coordinates of a plotted point are, or which of four labeled points matches a given coordinate. No lines or slope yet — only individual points. Coordinates use integers only, no fractions.",
+      exemplarQuestions: [
+        { question: "What quadrant is (−3, 2) in?", answer: "Quadrant II" },
+        { question: "Plot A(2, −4). Which quadrant?", answer: "Quadrant IV" },
+      ]
+    },
+    {
+      topicKey: "ratios_proportions",
+      topicName: "Ratios & Proportions",
+      description: "Writing ratios, equivalent ratios, and solving simple proportions",
+      gradeLevel: "6th Grade",
+      difficultyNotes: "Students write ratios in three forms (a:b, a/b, 'a to b'), find equivalent ratios by multiplying or dividing, and solve one-step proportions using cross-multiplication. Numbers stay manageable (under 50). Word problems describe simple real-life situations: recipes, maps, speed. No percent yet.",
+      exemplarQuestions: [
+        { question: "3/4 = ?/12", answer: "9" },
+        { question: "A recipe uses 2 cups flour for 3 cups sugar. For 9 cups sugar, how much flour?", answer: "6 cups" },
+      ]
+    },
+  ],
+  science: [
+    {
+      topicKey: "cell_structure",
+      topicName: "Cell Structure & Function",
+      description: "Plant vs animal cells, organelles and their jobs",
+      gradeLevel: "6th Grade Life Science",
+      difficultyNotes: "Students identify and describe the function of 6–8 key organelles: nucleus (control centre), cell membrane (gatekeeper), mitochondria (energy/ATP), cell wall (plant only, rigid structure), chloroplast (plant only, photosynthesis), vacuole (storage; large central vacuole in plants), ribosomes (protein synthesis), cytoplasm (fluid that fills cell). Questions ask to match organelle to function, or identify what's unique to plant vs animal cells. Vocabulary is at standard 6th-grade level — no biochemistry.",
+      exemplarQuestions: [
+        { question: "Which organelle is found in plant cells but NOT animal cells?", answer: "Cell wall" },
+        { question: "What is the function of the mitochondria?", answer: "Produces energy (ATP) for the cell" },
+      ]
+    },
+    {
+      topicKey: "ecosystems_food_webs",
+      topicName: "Ecosystems & Food Webs",
+      description: "Producers, consumers, decomposers, food chains and food webs",
+      gradeLevel: "6th Grade Life Science",
+      difficultyNotes: "Students classify organisms as producer/primary consumer/secondary consumer/tertiary consumer/decomposer. They trace energy flow through a food chain (sun → plant → herbivore → carnivore). They understand that energy decreases at each trophic level (~10% rule conceptually, not mathematically). Questions use real organisms from common ecosystems (grassland, forest, ocean). Students must identify what would happen if one species was removed.",
+      exemplarQuestions: [
+        { question: "Which organism is the producer in: grass → rabbit → fox?", answer: "Grass" },
+        { question: "What role does a mushroom play in an ecosystem?", answer: "Decomposer" },
+      ]
+    },
+    {
+      topicKey: "earth_layers_plate_tectonics",
+      topicName: "Earth's Layers & Plate Tectonics",
+      description: "Crust, mantle, outer core, inner core; tectonic plates and landform creation",
+      gradeLevel: "6th Grade Earth Science",
+      difficultyNotes: "Students name the four layers (crust, mantle, outer core, inner core) and describe each: state of matter, approximate composition, key properties. They understand that tectonic plates move on the mantle (convection currents). They know the three plate boundary types: convergent (mountains, trenches), divergent (rift valleys, mid-ocean ridges), transform (earthquakes). Questions are definitional and classification-based, not quantitative.",
+      exemplarQuestions: [
+        { question: "Which layer of Earth is liquid and made mostly of iron?", answer: "Outer core" },
+        { question: "What type of boundary creates mountains when two continental plates collide?", answer: "Convergent boundary" },
+      ]
+    },
+    {
+      topicKey: "forces_motion",
+      topicName: "Forces & Motion",
+      description: "Newton's three laws, gravity, friction, balanced vs unbalanced forces",
+      gradeLevel: "6th Grade Physical Science",
+      difficultyNotes: "Students state and apply Newton's Three Laws: 1st (inertia), 2nd (F=ma, conceptually — no algebra required), 3rd (action-reaction). They distinguish balanced forces (no change in motion) from unbalanced forces (change in motion). They identify friction and gravity in everyday situations. No calculations — all conceptual. Questions describe a scenario and ask which law applies, or predict what happens.",
+      exemplarQuestions: [
+        { question: "A soccer ball rolling on grass slows down. Which force is acting on it?", answer: "Friction" },
+        { question: "Newton's First Law says an object at rest stays at rest unless acted on by what?", answer: "An unbalanced (net) force" },
+      ]
+    },
+    {
+      topicKey: "weather_water_cycle",
+      topicName: "Weather & the Water Cycle",
+      description: "Evaporation, condensation, precipitation, the atmosphere, weather patterns",
+      gradeLevel: "6th Grade Earth Science",
+      difficultyNotes: "Students sequence the water cycle steps (evaporation → condensation → precipitation → runoff/collection) and explain what happens at each stage. They name the layers of the atmosphere (troposphere, stratosphere, mesosphere, thermosphere) and know weather occurs in the troposphere. They distinguish weather from climate. Questions are descriptive and definitional, not quantitative.",
+      exemplarQuestions: [
+        { question: "Water vapour cools and forms clouds. This process is called what?", answer: "Condensation" },
+        { question: "In which layer of the atmosphere does weather occur?", answer: "Troposphere" },
+      ]
+    },
+  ],
+  latin: [
+    {
+      topicKey: "latin_first_declension",
+      topicName: "First Declension Nouns",
+      description: "Endings for 1st declension nouns (-a, -ae) in all cases",
+      gradeLevel: "Latin I · Beginner",
+      difficultyNotes: "Students know the six cases (nominative, genitive, dative, accusative, ablative, vocative) and can give the correct ending for a 1st declension noun (e.g. puella, aqua, silva, rosa). Questions ask to identify the case of a noun in a sentence, choose the correct ending, or translate a single noun form. No verb agreement required — just noun recognition. Vocabulary limited to ~20 common 1st declension nouns.",
+      exemplarQuestions: [
+        { question: "What is the genitive singular of 'puella'?", answer: "puellae" },
+        { question: "In 'puellam video', what case is 'puellam'?", answer: "Accusative" },
+      ]
+    },
+    {
+      topicKey: "latin_second_declension",
+      topicName: "Second Declension Nouns",
+      description: "Masculine and neuter 2nd declension endings (-us/-er, -um)",
+      gradeLevel: "Latin I · Beginner",
+      difficultyNotes: "Students decline 2nd declension masculine nouns (servus, dominus, puer, ager) and neuter nouns (bellum, oppidum). Questions focus on identifying case from ending, choosing correct form, and distinguishing masculine from neuter in the nominative/accusative. Common error: neuter accusative = neuter nominative. Vocabulary limited to ~25 common 2nd declension nouns introduced in standard beginner texts.",
+      exemplarQuestions: [
+        { question: "What is the accusative plural of 'servus'?", answer: "servos" },
+        { question: "How do neuter nouns differ from masculine in the accusative singular?", answer: "They use -um just like the nominative (they are the same form)" },
+      ]
+    },
+    {
+      topicKey: "latin_present_tense_verbs",
+      topicName: "Present Tense Verb Conjugation",
+      description: "1st and 2nd conjugation verbs in present tense (all persons)",
+      gradeLevel: "Latin I · Beginner",
+      difficultyNotes: "Students conjugate 1st conjugation (-are: amare, portare, vocare) and 2nd conjugation (-ere: videre, habere, tenere) verbs in the present tense for all 6 persons (sing: -o/-m, -s, -t; pl: -mus, -tis, -nt). Questions ask to identify person/number from a conjugated form, supply the correct form, or translate a simple verb form. No compound tenses — present tense only.",
+      exemplarQuestions: [
+        { question: "What person and number is 'amatis'?", answer: "2nd person plural (you all love)" },
+        { question: "Give the 3rd person singular present of 'videre'?", answer: "videt" },
+      ]
+    },
+    {
+      topicKey: "latin_vocabulary_core",
+      topicName: "Core Latin Vocabulary",
+      description: "Essential Latin words — common nouns, verbs, adjectives and their meanings",
+      gradeLevel: "Latin I · Beginner",
+      difficultyNotes: "Students translate common Latin words to English and vice versa. Vocabulary drawn from standard beginner lists: body parts, family members, common actions (amare, videre, portare, esse, habere), time words (nunc, semper, saepe, numquam), location words (hic, ibi, in, ad), basic adjectives (bonus, malus, magnus, parvus, longus). Questions are direct vocabulary recall — no sentences required.",
+      exemplarQuestions: [
+        { question: "What does 'semper' mean?", answer: "Always" },
+        { question: "What is the Latin word for 'war'?", answer: "bellum" },
+      ]
+    },
+    {
+      topicKey: "latin_sentence_translation",
+      topicName: "Simple Latin Sentence Translation",
+      description: "Translate short Latin sentences using 1st/2nd declension nouns and present tense verbs",
+      gradeLevel: "Latin I · Beginner",
+      difficultyNotes: "Students translate sentences of 3–6 words using vocabulary and grammar already learned (1st/2nd declension, present tense). Subject-verb-object sentences. No subordinate clauses. No irregular verbs except esse. Adjectives agree with nouns in case, number, and gender but questions focus on meaning, not on explaining the agreement. Difficulty is 'read the sentence and pick the best translation from 4 options'.",
+      exemplarQuestions: [
+        { question: "Translate: 'Puella aquam portat.'", answer: "The girl carries water." },
+        { question: "Translate: 'Servi in villa laborant.'", answer: "The slaves work in the farmhouse." },
+      ]
+    },
+  ],
+  english: [
+    {
+      topicKey: "silver_chair_plot",
+      topicName: "The Silver Chair: Plot & Events",
+      description: "Key events, chapter sequence, and cause & effect in The Silver Chair",
+      gradeLevel: "6th Grade · C.S. Lewis · The Chronicles of Narnia",
+      difficultyNotes: "Students recall specific plot events: Jill and Eustace's arrival in Narnia via Aslan's Country, the Four Signs (exact wording matters), the Marsh-wiggle Puddleglum joining their quest, the Lady of the Green Kirtle and the Black Knight (Prince Rilian), the underground kingdom of Underland, the giants at Harfang, and the final freeing of Rilian. Questions ask about sequence ('what happened first'), cause-and-effect ('why did X happen'), and specific details ('where did they sleep at Harfang'). Students have read the book and know it well.",
+      exemplarQuestions: [
+        { question: "What are the Four Signs Aslan gives Jill at the start of her quest?", answer: "1) Greet the first friend in Narnia, 2) Journey to the ruined city of giants, 3) In the ruined city, write on a stone the words they find there, 4) When the lost prince asks them to do something in Aslan's name, they must do it" },
+        { question: "Who is the Black Knight revealed to be?", answer: "Prince Rilian, the lost son of King Caspian" },
+      ]
+    },
+    {
+      topicKey: "silver_chair_characters",
+      topicName: "The Silver Chair: Characters",
+      description: "Analysing Jill, Eustace, Puddleglum, Rilian, the Lady of the Green Kirtle, and Aslan",
+      gradeLevel: "6th Grade · C.S. Lewis · The Chronicles of Narnia",
+      difficultyNotes: "Questions focus on character traits backed by evidence from the text: Jill's initial cowardice and growth into courage, Eustace's continued transformation from Dragon Dawn Treader, Puddleglum's pessimistic speech masking fierce loyalty and courage (his speech to the Green Witch is important), Prince Rilian's enchantment and the hour of sanity, the Lady of the Green Kirtle as the White Witch parallel. Questions are interpretive, not just factual — 'why does Puddleglum do X' not just 'what is Puddleglum'.",
+      exemplarQuestions: [
+        { question: "How does Puddleglum break the Green Witch's enchantment?", answer: "He stamps on the fire with his bare foot, using pain to clear his mind and make the defiant speech about believing in Aslan even if Narnia isn't real" },
+        { question: "How has Eustace changed since 'The Voyage of the Dawn Treader'?", answer: "He is no longer selfish and bullying; he is braver and kinder, though still imperfect" },
+      ]
+    },
+    {
+      topicKey: "silver_chair_themes",
+      topicName: "The Silver Chair: Themes & Symbols",
+      description: "Obedience, the Four Signs, hope, temptation, and Lewis's symbolism",
+      gradeLevel: "6th Grade · C.S. Lewis · The Chronicles of Narnia",
+      difficultyNotes: "Questions explore major themes: 1) Obedience — Jill and Eustace repeatedly forget or disobey the Signs, which leads to their failures; 2) Temptation — Harfang represents comfort and pleasure as obstacles to the quest; 3) Hope — Puddleglum's famous speech about choosing to believe in Aslan even without proof; 4) Darkness vs. Light — the underground kingdom vs. Narnia above. Students can discuss these themes and support with examples. Questions ask students to identify a theme or explain what a symbol represents.",
+      exemplarQuestions: [
+        { question: "What does Harfang represent as a theme in the story?", answer: "The temptation of comfort and ease — it distracts the travellers from their quest" },
+        { question: "What is the main lesson Jill learns about the Four Signs?", answer: "That she must learn them perfectly and recite them every day, not relying on memory alone — obedience requires practice" },
+      ]
+    },
+    {
+      topicKey: "literary_devices_narnia",
+      topicName: "Literary Devices in The Silver Chair",
+      description: "Foreshadowing, symbolism, irony, characterisation, and imagery in Lewis's writing",
+      gradeLevel: "6th Grade ELA · Literary Analysis",
+      difficultyNotes: "Students identify and explain literary devices in passages: foreshadowing (early signs of the Green Witch's evil), symbolism (the silver chair as enchantment/imprisonment), irony (the children looking for Rilian without recognising him as the Black Knight), imagery (descriptions of Underland). Questions give a short passage or describe a scene and ask students to identify which device is used and explain it. Students have a working knowledge of: foreshadowing, symbolism, irony (situational and dramatic), imagery, personification, simile, metaphor.",
+      exemplarQuestions: [
+        { question: "What literary device is used when the reader knows the Black Knight is Rilian before Jill does?", answer: "Dramatic irony" },
+        { question: "What does the Silver Chair symbolise?", answer: "Enchantment, imprisonment, and the power the Green Witch holds over Rilian's mind" },
+      ]
+    },
+  ],
+  religion: [
+    {
+      topicKey: "the_creed_core_beliefs",
+      topicName: "The Creed & Core Catholic Beliefs",
+      description: "The Apostles' and Nicene Creed: Trinity, Incarnation, Resurrection, the Church",
+      gradeLevel: "6th Grade · Catholic Catechism · CCC 185–1065",
+      difficultyNotes: "Students can recite and explain the Apostles' Creed. Questions focus on: the Trinity (Father, Son, Holy Spirit — one God, three Persons), the Incarnation (Jesus is fully God and fully man), the Resurrection (bodily resurrection on the third day), the Ascension, the Last Judgement, the communion of saints, forgiveness of sins, and eternal life. Students know the difference between the Apostles' Creed and the Nicene Creed. Questions are at a 6th-grade understanding level — theological precision expected but no Latin terminology required.",
+      exemplarQuestions: [
+        { question: "What do Catholics mean when they say Jesus is 'fully God and fully man'?", answer: "The Incarnation — the Second Person of the Trinity took on a human nature without losing his divine nature (two natures, one Person)" },
+        { question: "What is the Trinity?", answer: "One God in Three Persons: Father, Son (Jesus Christ), and Holy Spirit" },
+      ]
+    },
+    {
+      topicKey: "the_seven_sacraments",
+      topicName: "The Seven Sacraments",
+      description: "Names, purpose, matter and form of each sacrament; sacraments of initiation, healing, and service",
+      gradeLevel: "6th Grade · Catholic Catechism · CCC 1210–1666",
+      difficultyNotes: "Students know all seven sacraments by name and can categorise them (Initiation: Baptism, Confirmation, Eucharist; Healing: Reconciliation, Anointing of the Sick; Service: Holy Orders, Matrimony). For the three Sacraments of Initiation and Reconciliation they know the matter (physical element: water, chrism, bread/wine, words of absolution) and form (words said). They know the ordinary minister of each. Questions ask for classification, identification of elements, and purpose.",
+      exemplarQuestions: [
+        { question: "Name the three Sacraments of Initiation.", answer: "Baptism, Confirmation, and the Eucharist" },
+        { question: "What is the 'matter' (physical element) of Baptism?", answer: "Water" },
+        { question: "What is the purpose of the Sacrament of Reconciliation?", answer: "To forgive sins committed after Baptism and restore the soul to God's grace" },
+      ]
+    },
+    {
+      topicKey: "ten_commandments",
+      topicName: "The Ten Commandments",
+      description: "All ten commandments, their meaning, and how they guide moral life",
+      gradeLevel: "6th Grade · Catholic Catechism · CCC 2052–2557",
+      difficultyNotes: "Students know all Ten Commandments in order, in their Catholic numbering (differs from Protestant — Catholics combine the 1st and 2nd Protestant commandments and split the last). They can explain what each commandment requires and forbids in practical terms. They understand that the first three relate to love of God, and the last seven to love of neighbour. Questions ask to name a commandment by number, identify which commandment is being violated in a scenario, or explain what the commandment means.",
+      exemplarQuestions: [
+        { question: "What is the Third Commandment?", answer: "Remember to keep holy the Lord's Day (Keep the Sabbath holy)" },
+        { question: "A student copies a friend's homework. Which commandment does this violate?", answer: "The Seventh Commandment — You shall not steal" },
+      ]
+    },
+    {
+      topicKey: "beatitudes_sermon_mount",
+      topicName: "The Beatitudes",
+      description: "All eight Beatitudes, their meaning, and their connection to discipleship",
+      gradeLevel: "6th Grade · Catholic Catechism · Matthew 5:3–10",
+      difficultyNotes: "Students know all eight Beatitudes from Matthew 5:3–10 (e.g. 'Blessed are the poor in spirit, for theirs is the kingdom of heaven'). They can explain what each Beatitude means in practical terms — who it describes and what reward is promised. They understand the Beatitudes as the heart of Jesus's moral teaching, going beyond the Ten Commandments to interior disposition. Questions ask to complete a Beatitude, identify who is being described, or explain its meaning.",
+      exemplarQuestions: [
+        { question: "Complete the Beatitude: 'Blessed are the pure in heart...'", answer: "'...for they shall see God'" },
+        { question: "What does 'poor in spirit' mean in the First Beatitude?", answer: "Being humble and recognising one's complete dependence on God, not proud or self-reliant" },
+      ]
+    },
+    {
+      topicKey: "works_of_mercy",
+      topicName: "Works of Mercy",
+      description: "Corporal and Spiritual Works of Mercy — what they are and how to practice them",
+      gradeLevel: "6th Grade · Catholic Catechism · CCC 2447",
+      difficultyNotes: "Students know all seven Corporal Works of Mercy (feed the hungry, give drink to the thirsty, clothe the naked, shelter the homeless, visit the sick, visit the imprisoned, bury the dead) and all seven Spiritual Works of Mercy (counsel the doubtful, instruct the ignorant, admonish the sinner, comfort the sorrowful, forgive offences, bear wrongs patiently, pray for the living and dead). They can classify a described action as a Work of Mercy and identify which one. They understand these flow from Matthew 25.",
+      exemplarQuestions: [
+        { question: "Name three Corporal Works of Mercy.", answer: "Any three of: feed the hungry, give drink to the thirsty, clothe the naked, shelter the homeless, visit the sick, visit the imprisoned, bury the dead" },
+        { question: "A student patiently listens to a classmate who is grieving. Which Spiritual Work of Mercy is this?", answer: "Comfort the sorrowful" },
+      ]
+    },
+  ],
+};
 const SUBJECTS = [
   {
     id: "math",
@@ -1478,6 +1761,22 @@ async function updateStats(sessionPct, username) {
   return updated;
 }
 
+// ─── Curriculum Library storage (admin-managed, shared across all students) ───
+function curriculumKey(subjectId) { return `curriculum-${subjectId}`; }
+
+async function loadCurriculum(subjectId) {
+  try {
+    const r = await storage.get(curriculumKey(subjectId), true); // shared=true
+    return r ? JSON.parse(r.value) : [];
+  } catch { return []; }
+}
+
+async function saveCurriculum(topics, subjectId) {
+  try {
+    await storage.set(curriculumKey(subjectId), JSON.stringify(topics), true); // shared=true
+  } catch(e) { console.error("saveCurriculum error", e); }
+}
+
 // ─── Topic Bank storage ──────────────────────────────────────────────────────
 function topicBankKey(subjectId, username) { return `${userPrefix(username)}topicbank-${subjectId || "math"}`; }
 async function loadTopicBank(subjectId, username) {
@@ -1709,10 +2008,14 @@ ${SCHEMA_INSTRUCTIONS}` });
       : subject?.id === "social_studies" || subject?.id === "history"
       ? "\n\nFor SOCIAL STUDIES: include 'visual' with timeline for sequence/date questions."
       : "";
+    // If this is a curriculum topic, inject difficulty calibration data
+    const calibrationBlock = hwTopic._fromCurriculum && hwTopic.difficultyNotes
+      ? `\n\nDIFFICULTY CALIBRATION — this topic comes from a curated school curriculum library. The expected difficulty level is:\n${hwTopic.difficultyNotes}${hwTopic.gradeLevel ? `\nGrade/Level: ${hwTopic.gradeLevel}` : ""}${hwTopic.exemplarQuestions?.length ? `\n\nEXEMPLAR QUESTIONS showing the expected difficulty (match this level exactly):\n${hwTopic.exemplarQuestions.map((q,i)=>`${i+1}. Q: ${q.question}\n   A: ${q.answer}`).join("\n")}` : ""}\n\nIMPORTANT: Generate questions at THIS specific difficulty level — not easier, not harder. Match the vocabulary, complexity, and number of steps shown in the exemplars above.`
+      : "";
     blocks.push({ type:"text", text:`You are a tutor for a 6th grader with dyslexia.
 Subject: ${subject?.name || "Math"}.
 Generate exactly ${qCount} practice problems on this topic: "${hwTopic.topicName}" — ${hwTopic.description}
-Difficulty: ${diffDesc}
+Difficulty: ${diffDesc}${calibrationBlock}
 Dyslexia rules: SHORT question text, no clutter, unambiguous wording. Multiple choice only.
 Use topic string: "${hwTopic.topicKey}"
 Mix sub-types within the topic where appropriate.${bankVisualHint}
@@ -1996,6 +2299,13 @@ export default function App() {
 
   // Topic bank
   const [topicBank, setTopicBank] = useState([]);
+  const [curriculumTopics, setCurriculumTopics] = useState([]); // admin library topics for current subject
+  // Admin curriculum editor state
+  const [adminCurrTab, setAdminCurrTab] = useState("english"); // which subject is open in curriculum editor
+  const [adminCurrTopics, setAdminCurrTopics] = useState([]); // topics for current admin subject
+  const [adminCurrLoading, setAdminCurrLoading] = useState(false);
+  const [adminCurrEditing, setAdminCurrEditing] = useState(null); // topic being edited/added
+  const [adminCurrSaving, setAdminCurrSaving] = useState(false);
   const [topicDropOpen, setTopicDropOpen] = useState(false);
   // Dashboard state
   const [dashboardData, setDashboardData] = useState(null);
@@ -2027,6 +2337,7 @@ export default function App() {
     if (!subject || !currentUser) return;
     loadStats(currentUser.username).then(setHomeStats);
     loadTopicBank(subject.id, currentUser.username).then(setTopicBank);
+    loadCurriculum(subject.id).then(setCurriculumTopics);
     loadSrsCards(currentUser.username).then(setSrsCards);
     loadSessions(subject.id, currentUser.username).then(sessions => {
       const recent = sessions.slice(0, 10);
@@ -2670,8 +2981,15 @@ ${SCHEMA_INSTRUCTIONS}`;
 
             {/* Tab bar */}
             <div style={{ display:"flex", background:"#F0EEE9", borderRadius:8, padding:3, marginBottom:20 }}>
-              {[["pending","⏳ Pending"],["all","👥 All Users"],["students","📊 Dashboards"],["add","➕ Add User"]].map(([tab, label]) => (
-                <button key={tab} onClick={() => { setAdminTab(tab); if (tab==="students") loadAdminStudentList(); }}
+              {[["pending","⏳ Pending"],["all","👥 All Users"],["students","📊 Dashboards"],["curriculum","📚 Curriculum"],["add","➕ Add User"]].map(([tab, label]) => (
+                <button key={tab} onClick={() => {
+                  setAdminTab(tab);
+                  if (tab==="students") loadAdminStudentList();
+                  if (tab==="curriculum") {
+                    setAdminCurrLoading(true);
+                    loadCurriculum(adminCurrTab).then(t => { setAdminCurrTopics(t); setAdminCurrLoading(false); });
+                  }
+                }}
                   style={{ flex:1, padding:"8px 4px", background:adminTab===tab?"#1E3A5F":"transparent", border:"none", borderRadius:6, color:adminTab===tab?"#FFFFFF":"#9A9490", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1, transition:"all .15s" }}>
                   {label}
                 </button>
@@ -2731,6 +3049,253 @@ ${SCHEMA_INSTRUCTIONS}`;
                 ))}
               </div>
             )}
+
+            {/* Curriculum Library tab */}
+            {adminTab === "curriculum" && (() => {
+              const CURR_SUBJECTS = [
+                { id:"english",       name:"English",       accent:"#a78bfa" },
+                { id:"science",       name:"Science",       accent:"#34d399" },
+                { id:"math",          name:"Math",          accent:"#1E3A5F" },
+                { id:"latin",         name:"Latin",         accent:"#f472b6" },
+                { id:"religion",      name:"Religion",      accent:"#fbbf24" },
+                { id:"social_studies",name:"Social Studies",accent:"#fb923c" },
+                { id:"grammar",       name:"Grammar",       accent:"#60a5fa" },
+              ];
+              const currSubj = CURR_SUBJECTS.find(s => s.id === adminCurrTab) || CURR_SUBJECTS[0];
+
+              const saveEditing = async () => {
+                if (!adminCurrEditing?.topicName?.trim()) return;
+                setAdminCurrSaving(true);
+                const topic = {
+                  ...adminCurrEditing,
+                  topicKey: adminCurrEditing.topicKey || adminCurrEditing.topicName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""),
+                  updatedAt: new Date().toISOString(),
+                };
+                const existing = adminCurrTopics.findIndex(t => t.topicKey === topic.topicKey);
+                const updated = existing >= 0
+                  ? adminCurrTopics.map((t,i) => i === existing ? topic : t)
+                  : [...adminCurrTopics, topic];
+                await saveCurriculum(updated, adminCurrTab);
+                setAdminCurrTopics(updated);
+                setAdminCurrEditing(null);
+                setAdminCurrSaving(false);
+              };
+
+              const deleteTopic = async (topicKey) => {
+                const updated = adminCurrTopics.filter(t => t.topicKey !== topicKey);
+                await saveCurriculum(updated, adminCurrTab);
+                setAdminCurrTopics(updated);
+              };
+
+              const addExemplar = () => {
+                setAdminCurrEditing(e => ({ ...e,
+                  exemplarQuestions: [...(e.exemplarQuestions||[]), { question:"", answer:"" }]
+                }));
+              };
+
+              const updateExemplar = (i, field, val) => {
+                setAdminCurrEditing(e => {
+                  const eq = [...(e.exemplarQuestions||[])];
+                  eq[i] = { ...eq[i], [field]: val };
+                  return { ...e, exemplarQuestions: eq };
+                });
+              };
+
+              const removeExemplar = (i) => {
+                setAdminCurrEditing(e => ({
+                  ...e, exemplarQuestions: (e.exemplarQuestions||[]).filter((_,j)=>j!==i)
+                }));
+              };
+
+              return (
+                <div>
+                  {/* Subject tabs */}
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:16 }}>
+                    {CURR_SUBJECTS.map(s => (
+                      <button key={s.id}
+                        onClick={() => {
+                          setAdminCurrTab(s.id);
+                          setAdminCurrEditing(null);
+                          setAdminCurrLoading(true);
+                          loadCurriculum(s.id).then(t => { setAdminCurrTopics(t); setAdminCurrLoading(false); });
+                        }}
+                        style={{ padding:"5px 10px", background:adminCurrTab===s.id?s.accent:"transparent", border:`1.5px solid ${s.accent}44`, borderRadius:20, color:adminCurrTab===s.id?"#fff":s.accent, fontSize:11, fontWeight:800, cursor:"pointer" }}>
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ── Seed Starter Pack button ── */}
+                  {!adminCurrEditing && STARTER_PACKS[adminCurrTab]?.length > 0 && (() => {
+                    const packTopics = STARTER_PACKS[adminCurrTab];
+                    const existingKeys = new Set(adminCurrTopics.map(t => t.topicKey));
+                    const newTopics = packTopics.filter(t => !existingKeys.has(t.topicKey));
+                    if (newTopics.length === 0) return (
+                      <div style={{ background:"#1a2a1a", border:"1px solid #4ade8033", borderRadius:10, padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", gap:10 }}>
+                        <span style={{ color:"#4ade80", fontSize:13 }}>✓</span>
+                        <span style={{ fontSize:12, color:"#4ade80", fontWeight:700 }}>All starter topics already loaded for {currSubj.name}</span>
+                      </div>
+                    );
+                    return (
+                      <div style={{ background:"#1a1a2a", border:`1.5px dashed ${currSubj.accent}55`, borderRadius:10, padding:14, marginBottom:16 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                          <div>
+                            <div style={{ fontSize:12, fontWeight:800, color:currSubj.accent, letterSpacing:1, textTransform:"uppercase" }}>
+                              📚 Starter Pack — {currSubj.name}
+                            </div>
+                            <div style={{ fontSize:11, color:"#9A9490", marginTop:3 }}>
+                              {newTopics.length} topic{newTopics.length>1?"s":""} ready to load, calibrated to your curriculum
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              setAdminCurrLoading(true);
+                              const toAdd = newTopics.map(t => ({ ...t, updatedAt: new Date().toISOString(), _seeded: true }));
+                              const updated = [...adminCurrTopics, ...toAdd];
+                              await saveCurriculum(updated, adminCurrTab);
+                              setAdminCurrTopics(updated);
+                              setAdminCurrLoading(false);
+                            }}
+                            style={{ padding:"8px 14px", background:currSubj.accent, border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                            Load All →
+                          </button>
+                        </div>
+                        {/* Preview of topics to be added */}
+                        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                          {newTopics.map((t,i) => (
+                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                              <div style={{ width:5, height:5, borderRadius:"50%", background:currSubj.accent, flexShrink:0 }}/>
+                              <div style={{ fontSize:11, color:"#ddd", fontWeight:700 }}>{t.topicName}</div>
+                              <div style={{ fontSize:10, color:"#666", flex:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Editor panel */}
+                  {adminCurrEditing ? (
+                    <div style={{ background:"#1a1a1a", border:`1.5px solid ${currSubj.accent}44`, borderRadius:12, padding:16, marginBottom:16 }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:currSubj.accent, marginBottom:12, letterSpacing:1, textTransform:"uppercase" }}>
+                        {adminCurrEditing.topicKey ? "Edit Topic" : "New Topic"} — {currSubj.name}
+                      </div>
+
+                      {[
+                        { label:"Topic Name *", field:"topicName", placeholder:"e.g. Multiplying Fractions by Whole Numbers" },
+                        { label:"Description", field:"description", placeholder:"One sentence a student sees — what this topic covers" },
+                        { label:"Grade / Level", field:"gradeLevel", placeholder:"e.g. 6th Grade · Saxon Math 7/6 Ch.4" },
+                      ].map(({ label, field, placeholder }) => (
+                        <div key={field} style={{ marginBottom:10 }}>
+                          <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, marginBottom:4, fontWeight:700, textTransform:"uppercase" }}>{label}</div>
+                          <input value={adminCurrEditing[field]||""} onChange={e=>setAdminCurrEditing(ed=>({...ed,[field]:e.target.value}))}
+                            placeholder={placeholder}
+                            style={{ width:"100%", padding:"8px 10px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#fff", fontSize:12, boxSizing:"border-box" }}/>
+                        </div>
+                      ))}
+
+                      {/* Difficulty notes — the critical calibration field */}
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:10, color:"#fbbf24", letterSpacing:2, marginBottom:4, fontWeight:700, textTransform:"uppercase" }}>Difficulty Calibration Notes *</div>
+                        <div style={{ fontSize:10, color:"#9A9490", marginBottom:6, lineHeight:1.5 }}>
+                          Describe the expected difficulty precisely: vocabulary, number complexity, number of steps, what concepts students already know. This is injected into the AI prompt to calibrate every generated question.
+                        </div>
+                        <textarea value={adminCurrEditing.difficultyNotes||""} rows={4}
+                          onChange={e=>setAdminCurrEditing(ed=>({...ed,difficultyNotes:e.target.value}))}
+                          placeholder={"e.g. Students multiply a simple fraction (denominator ≤ 12) by a 1-digit whole number. They should simplify the result. Problems use unit fractions and familiar fractions like 1/2, 2/3, 3/4. No mixed numbers yet. Answer is always less than 5. Matches Saxon Math 7/6 Lesson 64."}
+                          style={{ width:"100%", padding:"8px 10px", background:"#2a2a2a", border:"1.5px solid #fbbf2444", borderRadius:6, color:"#fff", fontSize:11, lineHeight:1.6, resize:"vertical", boxSizing:"border-box" }}/>
+                      </div>
+
+                      {/* Exemplar questions */}
+                      <div style={{ marginBottom:12 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                          <div>
+                            <div style={{ fontSize:10, color:"#60a5fa", letterSpacing:2, fontWeight:700, textTransform:"uppercase" }}>Exemplar Questions</div>
+                            <div style={{ fontSize:10, color:"#9A9490", marginTop:2 }}>2–3 real examples from homework/class. The AI will match this exact difficulty.</div>
+                          </div>
+                          <button onClick={addExemplar}
+                            style={{ background:"#60a5fa22", border:"1px solid #60a5fa44", borderRadius:6, color:"#60a5fa", fontSize:11, padding:"4px 10px", cursor:"pointer", fontWeight:700 }}>
+                            + Add
+                          </button>
+                        </div>
+                        {(adminCurrEditing.exemplarQuestions||[]).map((ex,i) => (
+                          <div key={i} style={{ background:"#222", border:"1px solid #333", borderRadius:8, padding:10, marginBottom:8 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                              <div style={{ fontSize:10, color:"#9A9490", fontWeight:700 }}>Example {i+1}</div>
+                              <button onClick={()=>removeExemplar(i)} style={{ background:"none", border:"none", color:"#ff6b6b", cursor:"pointer", fontSize:11 }}>✕</button>
+                            </div>
+                            <input value={ex.question||""} onChange={e=>updateExemplar(i,"question",e.target.value)}
+                              placeholder="Question (as it would appear on homework)"
+                              style={{ width:"100%", padding:"6px 8px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:4, color:"#fff", fontSize:11, marginBottom:6, boxSizing:"border-box" }}/>
+                            <input value={ex.answer||""} onChange={e=>updateExemplar(i,"answer",e.target.value)}
+                              placeholder="Correct answer"
+                              style={{ width:"100%", padding:"6px 8px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:4, color:"#fff", fontSize:11, boxSizing:"border-box" }}/>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button onClick={saveEditing} disabled={adminCurrSaving||!adminCurrEditing.topicName?.trim()}
+                          style={{ flex:1, padding:"10px", background:currSubj.accent, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer", opacity:adminCurrSaving||!adminCurrEditing.topicName?.trim()?0.5:1 }}>
+                          {adminCurrSaving ? "Saving…" : "Save Topic"}
+                        </button>
+                        <button onClick={()=>setAdminCurrEditing(null)}
+                          style={{ padding:"10px 16px", background:"transparent", border:"1px solid #3a3a3a", borderRadius:8, color:"#9A9490", fontSize:13, cursor:"pointer" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={()=>setAdminCurrEditing({ topicName:"", description:"", gradeLevel:"", difficultyNotes:"", exemplarQuestions:[] })}
+                      style={{ width:"100%", padding:"11px", background:"transparent", border:`1.5px dashed ${currSubj.accent}55`, borderRadius:10, color:currSubj.accent, fontSize:13, fontWeight:700, cursor:"pointer", marginBottom:16 }}>
+                      + Add Topic to {currSubj.name} Library
+                    </button>
+                  )}
+
+                  {/* Topic list */}
+                  {adminCurrLoading
+                    ? <div style={{ textAlign:"center", color:"#9A9490", padding:24 }}>Loading…</div>
+                    : adminCurrTopics.length === 0 && !adminCurrEditing
+                      ? <div style={{ textAlign:"center", color:"#9A9490", padding:24, fontSize:13 }}>
+                          No topics yet for {currSubj.name}.<br/>
+                          <span style={{ fontSize:11 }}>Add topics above — students will see them immediately.</span>
+                        </div>
+                      : adminCurrTopics.map(t => (
+                        <div key={t.topicKey} style={{ background:"#1a1a1a", border:`1px solid ${currSubj.accent}33`, borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontSize:14, fontWeight:800, color:currSubj.accent, marginBottom:2 }}>{t.topicName}</div>
+                              {t.gradeLevel && <div style={{ fontSize:10, color:"#9A9490", marginBottom:4, fontWeight:600 }}>{t.gradeLevel}</div>}
+                              {t.description && <div style={{ fontSize:11, color:"#888", lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
+                              {t.difficultyNotes && (
+                                <div style={{ background:"#2a2a2a", borderRadius:6, padding:"6px 8px", marginTop:6 }}>
+                                  <div style={{ fontSize:9, color:"#fbbf24", letterSpacing:2, fontWeight:700, marginBottom:3, textTransform:"uppercase" }}>Difficulty Calibration</div>
+                                  <div style={{ fontSize:10, color:"#888", lineHeight:1.5 }}>{t.difficultyNotes.slice(0,180)}{t.difficultyNotes.length>180?"…":""}</div>
+                                </div>
+                              )}
+                              {(t.exemplarQuestions||[]).length > 0 && (
+                                <div style={{ fontSize:9, color:"#60a5fa", marginTop:6, fontWeight:700 }}>
+                                  {t.exemplarQuestions.length} exemplar question{t.exemplarQuestions.length!==1?"s":""} attached
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                              <button onClick={()=>setAdminCurrEditing({...t})}
+                                style={{ background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#9A9490", fontSize:11, padding:"4px 10px", cursor:"pointer" }}>
+                                Edit
+                              </button>
+                              <button onClick={()=>deleteTopic(t.topicKey)}
+                                style={{ background:"#ff6b6b11", border:"1px solid #ff6b6b33", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"4px 10px", cursor:"pointer" }}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                  }
+                </div>
+              );
+            })()}
 
             {/* Student Dashboards tab */}
             {adminTab === "students" && (
@@ -2825,21 +3390,72 @@ ${SCHEMA_INSTRUCTIONS}`;
                     </div>
                 }
 
-                {/* All saved topics — flowing grid, same size as General/Mix */}
+                {/* ── Curriculum Library Topics (admin-curated) ── */}
+                {curriculumTopics.length > 0 && (
+                  <>
+                    <div style={{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:8, marginTop:8, marginBottom:-2 }}>
+                      <SubjectIcon id={subject?.id} size={12} color={subject?.accent||"#1E3A5F"} strokeWidth={2}/>
+                      <span style={{ fontSize:9, color:subject?.accent||"#1E3A5F", letterSpacing:3, textTransform:"uppercase", fontWeight:800 }}>Course Library</span>
+                      <div style={{ flex:1, height:1, background:(subject?.accent||"#1E3A5F")+"22" }}/>
+                    </div>
+                    {curriculumTopics.map(t => {
+                      const color = subject?.accent || "#1E3A5F";
+                      return (
+                        <button key={"curr_"+t.topicKey}
+                          onClick={() => { setHwTopic({ ...t, _fromCurriculum: true }); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
+                          style={{ background:"#FAFAF8", border:`1.5px solid ${color}33`, borderRadius:10, padding:"12px 14px", cursor:"pointer", textAlign:"left", transition:"border-color .2s, box-shadow .2s", position:"relative", boxShadow:"none" }}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=color+"77";e.currentTarget.style.boxShadow=`0 2px 10px ${color}18`;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"33";e.currentTarget.style.boxShadow="none";}}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:6, marginBottom:4 }}>
+                            <div style={{ fontSize:13, fontWeight:800, color, lineHeight:1.25, flex:1 }}>{t.topicName}</div>
+                            <div style={{ fontSize:8, background:color+"18", border:`1px solid ${color}33`, color, borderRadius:4, padding:"2px 6px", fontWeight:800, letterSpacing:1, whiteSpace:"nowrap", flexShrink:0 }}>LIBRARY</div>
+                          </div>
+                          <div style={{ fontSize:10, color:"#9A9490", lineHeight:1.45, marginBottom: t.gradeLevel ? 5 : 0 }}>{t.description}</div>
+                          {t.gradeLevel && (
+                            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                              <div style={{ width:3, height:3, borderRadius:"50%", background:color+"66" }}/>
+                              <div style={{ fontSize:9, color:color+"77", fontWeight:700 }}>{t.gradeLevel}</div>
+                            </div>
+                          )}
+                          {(t.exemplarQuestions||[]).length > 0 && (
+                            <div style={{ fontSize:9, color:color+"55", marginTop:4, fontWeight:600 }}>
+                              {t.exemplarQuestions.length} calibration example{t.exemplarQuestions.length>1?"s":""}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {topicBank.length > 0 && (
+                      <div style={{ gridColumn:"1/-1", fontSize:9, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", fontWeight:700, marginTop:4, marginBottom:-4 }}>
+                        Your Topics
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* ── My Topics — personal homework uploads ── */}
+                {topicBank.length > 0 && (
+                  <div style={{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:8, marginTop:4, marginBottom:-2 }}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" stroke="#9A9490" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <span style={{ fontSize:9, color:"#9A9490", letterSpacing:3, textTransform:"uppercase", fontWeight:800 }}>My Uploads</span>
+                    <div style={{ flex:1, height:1, background:"#9A9490"+"22" }}/>
+                  </div>
+                )}
                 {topicBank.map(t => {
                   const color = topicColor(t.topicKey);
                   return (
                     <button key={t.topicKey}
                       onClick={() => { setHwTopic(t); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
-                      style={{ background:"#FFFFFF", border:`1.5px solid ${color}33`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=color+"88";e.currentTarget.style.background=color+"0a";}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"33";e.currentTarget.style.background="#FFFFFF";}}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:5 }}>
-                        <div style={{ fontSize:18 }}>📚</div>
-                        <div style={{ fontSize:9, color:color+"66", fontFamily:"monospace" }}>×{t.sessionCount}</div>
+                      style={{ background:"#FFFFFF", border:`1.5px solid ${color}22`, borderRadius:10, padding:"12px 14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=color+"77";e.currentTarget.style.background=color+"08";}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"22";e.currentTarget.style.background="#FFFFFF";}}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
+                        <div style={{ fontSize:11, fontWeight:800, color, lineHeight:1.25, flex:1 }}>{t.topicName}</div>
+                        <div style={{ fontSize:9, color:color+"66", fontFamily:"monospace", flexShrink:0, marginLeft:6 }}>×{t.sessionCount}</div>
                       </div>
-                      <div style={{ fontSize:13, fontWeight:800, color, lineHeight:1.2 }}>{t.topicName}</div>
-                      <div style={{ fontSize:10, color:"#3a3a3a", marginTop:3, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{t.description}</div>
+                      <div style={{ fontSize:10, color:"#9A9490", lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{t.description}</div>
                     </button>
                   );
                 })}
