@@ -2395,6 +2395,7 @@ export default function App() {
     materials: null, materialsB64: null, materialsType: null, generatingPlan: false,
   });
   const [tpPlanLoading, setTpPlanLoading] = useState(false);
+  const [tpCurriculumTopics, setTpCurriculumTopics] = useState([]); // curriculum topics for selected subject in wizard
   const prefetchedRef = useRef([]);
   const [bookTitle, setBookTitle] = useState("");             // book title for English
   const [bookChapter, setBookChapter] = useState("");         // chapter or chapter range
@@ -2976,6 +2977,9 @@ ${SCHEMA_INSTRUCTIONS}`;
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.55} }
         @keyframes fade-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+        @keyframes pulse { from { opacity:0.4; r:3; } to { opacity:1; r:5; } }
+        @keyframes progress-bar { 0%{width:0%} 30%{width:35%} 60%{width:62%} 85%{width:82%} 100%{width:94%} }
         @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.07)} 100%{transform:scale(1)} }
         .ghost-hover:hover { border-color: #D0CCC8 !important; color: #4A4540 !important; }
         .session-row:hover { background: #F8F6F3 !important; }
@@ -4446,7 +4450,10 @@ ${SCHEMA_INSTRUCTIONS}`;
             <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Subject</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:20 }}>
               {SUBJECTS.map(sub => (
-                <button key={sub.id} onClick={() => setTpSetup(s => ({...s, subject:sub}))}
+                <button key={sub.id} onClick={() => {
+                    setTpSetup(s => ({...s, subject:sub}));
+                    loadCurriculum(sub.id).then(setTpCurriculumTopics);
+                  }}
                   style={{ padding:"10px 12px", background:tpSetup.subject?.id===sub.id ? sub.accent+"18" : "#F8F6F3", border:`1.5px solid ${tpSetup.subject?.id===sub.id ? sub.accent : "#E2DDD8"}`, borderRadius:10, cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"all .15s" }}>
                   <SubjectIcon id={sub.id} size={16} color={tpSetup.subject?.id===sub.id ? sub.accent : "#9A9490"} strokeWidth={1.8}/>
                   <span style={{ fontSize:12, fontWeight:800, color:tpSetup.subject?.id===sub.id ? sub.accent : "#555" }}>{sub.name}</span>
@@ -4458,13 +4465,13 @@ ${SCHEMA_INSTRUCTIONS}`;
             <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Test Date</div>
             <input type="date" value={tpSetup.testDate}
               min={new Date().toISOString().split("T")[0]}
-              max={new Date(Date.now()+7*86400000).toISOString().split("T")[0]}
+              max={new Date(Date.now()+14*86400000).toISOString().split("T")[0]}
               onChange={e => setTpSetup(s => ({...s, testDate:e.target.value}))}
               style={{ width:"100%", padding:"10px 12px", background:"#F8F6F3", border:"1.5px solid #E2DDD8", borderRadius:10, fontSize:14, color:"#1E3A5F", fontWeight:700, boxSizing:"border-box", marginBottom:8 }}/>
             {tpSetup.testDate && (() => {
               const d = Math.ceil((new Date(tpSetup.testDate) - new Date()) / 86400000);
               return <div style={{ fontSize:11, color: d<=1?"#dc2626":d<=3?"#D97706":"#16a34a", fontWeight:700, marginBottom:16 }}>
-                {d <= 0 ? "⚠️ That date has passed" : d === 1 ? "⚡ Tomorrow — we'll make it count!" : d <= 3 ? `⏰ ${d} days — focused plan` : `📅 ${d} days — solid prep time`}
+                {d <= 0 ? "⚠️ That date has passed" : d === 1 ? "⚡ Tomorrow — we'll make it count!" : d <= 3 ? `⏰ ${d} days — focused plan` : d <= 7 ? `📅 ${d} days — solid prep time` : `🗓 ${d} days — comprehensive plan`}
               </div>;
             })()}
 
@@ -4506,28 +4513,23 @@ ${SCHEMA_INSTRUCTIONS}`;
                 style={{ padding:"9px 14px", background:tpSetup.subject?.accent||"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontWeight:800, cursor:"pointer", fontSize:13 }}>+</button>
             </div>
 
-            {/* Curriculum library quick-add */}
-            {(() => {
-              const [currTopics, setCurrTopics] = React.useState([]);
-              React.useEffect(() => { if (tpSetup.subject) loadCurriculum(tpSetup.subject.id).then(setCurrTopics); }, [tpSetup.subject?.id]);
-              if (!currTopics.length) return null;
-              return (
-                <div style={{ marginBottom:16 }}>
-                  <div style={{ fontSize:9, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Quick-add from library</div>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                    {currTopics.map(t => {
-                      const already = tpSetup.topics.includes(t.topicName);
-                      return (
-                        <button key={t.topicKey} onClick={() => { if (!already) setTpSetup(s=>({...s, topics:[...s.topics, t.topicName]})); }}
-                          style={{ padding:"4px 10px", background:already?"#F0EEE9":"#fff", border:`1px solid ${tpSetup.subject?.accent||"#1E3A5F"}33`, borderRadius:20, fontSize:11, fontWeight:700, color:already?"#C0BCB8":tpSetup.subject?.accent||"#1E3A5F", cursor:already?"default":"pointer" }}>
-                          {already ? "✓ " : ""}{t.topicName}
-                        </button>
-                      );
-                    })}
-                  </div>
+            {/* Curriculum library quick-add — uses component-level tpCurriculumTopics state */}
+            {tpCurriculumTopics.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:9, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Quick-add from library</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {tpCurriculumTopics.map(t => {
+                    const already = tpSetup.topics.includes(t.topicName);
+                    return (
+                      <button key={t.topicKey} onClick={() => { if (!already) setTpSetup(s=>({...s, topics:[...s.topics, t.topicName]})); }}
+                        style={{ padding:"4px 10px", background:already?"#F0EEE9":"#fff", border:`1px solid ${tpSetup.subject?.accent||"#1E3A5F"}33`, borderRadius:20, fontSize:11, fontWeight:700, color:already?"#C0BCB8":tpSetup.subject?.accent||"#1E3A5F", cursor:already?"default":"pointer" }}>
+                        {already ? "✓ " : ""}{t.topicName}
+                      </button>
+                    );
+                  })}
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
             <div style={{ fontSize:11, color:"#9A9490", marginBottom:16, fontStyle:"italic" }}>
               💡 No topics added? That's fine — if you upload review materials in the next step, the AI will extract topics automatically.
@@ -4595,39 +4597,78 @@ ${SCHEMA_INSTRUCTIONS}`;
               </div>
             </div>
 
-            <button onClick={async () => {
-              if (tpSetup.generatingPlan) return;
-              setTpSetup(s=>({...s, generatingPlan:true}));
-              setTpPlanLoading(true);
-              try {
-                const plan = await generateTestPrepPlan({
-                  subject: tpSetup.subject,
-                  testDate: tpSetup.testDate,
-                  topics: tpSetup.topics,
-                  materialsB64: tpSetup.materialsB64,
-                  materialsType: tpSetup.materialsType,
-                  masteryData: dashboardData,
-                  username: currentUser?.username,
-                });
-                const existing = await loadTestPreps(currentUser?.username);
-                const updated = [...existing, plan];
-                await saveTestPreps(updated, currentUser?.username);
-                setTestPreps(updated);
-                setActiveTestPrep(plan);
-                setTestPrepScreen("plan");
-              } catch(e) {
-                setError("Could not generate plan: " + e.message);
-              } finally {
-                setTpSetup(s=>({...s, generatingPlan:false}));
-                setTpPlanLoading(false);
-              }
-            }} style={{ width:"100%", padding:"13px", background: tpSetup.subject?.accent||"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer", opacity:tpSetup.generatingPlan?0.7:1 }}>
-              {tpSetup.generatingPlan ? "🧠 Building your plan…" : "✨ Generate Study Plan"}
-            </button>
-            {tpSetup.generatingPlan && (
-              <div style={{ textAlign:"center", fontSize:11, color:"#9A9490", marginTop:10 }}>
-                Reading your materials, checking your mastery data, computing the optimal schedule…
+            {tpSetup.generatingPlan ? (
+              /* ── Magic loading screen while AI builds the plan ── */
+              <div style={{ textAlign:"center", padding:"8px 0 4px" }}>
+                {/* Animated brain/constellation graphic */}
+                <div style={{ marginBottom:20, position:"relative", height:100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width={120} height={100} viewBox="0 0 120 100" style={{ overflow:"visible" }}>
+                    {/* Pulsing outer ring */}
+                    <circle cx={60} cy={50} r={38} fill="none" stroke={tpSetup.subject?.accent||"#1E3A5F"} strokeWidth={1} strokeDasharray="4 6" opacity={0.3} style={{ animation:"spin 8s linear infinite", transformOrigin:"60px 50px" }}/>
+                    {/* Middle ring */}
+                    <circle cx={60} cy={50} r={26} fill="none" stroke={tpSetup.subject?.accent||"#1E3A5F"} strokeWidth={1.5} strokeDasharray="3 5" opacity={0.5} style={{ animation:"spin 5s linear infinite reverse", transformOrigin:"60px 50px" }}/>
+                    {/* Core circle */}
+                    <circle cx={60} cy={50} r={14} fill={tpSetup.subject?.accent||"#1E3A5F"} opacity={0.12}/>
+                    <circle cx={60} cy={50} r={14} fill="none" stroke={tpSetup.subject?.accent||"#1E3A5F"} strokeWidth={2} opacity={0.6}/>
+                    {/* Subject icon in center */}
+                    <g transform="translate(48,38)">
+                      <SubjectIcon id={tpSetup.subject?.id||"math"} size={24} color={tpSetup.subject?.accent||"#1E3A5F"} strokeWidth={1.8}/>
+                    </g>
+                    {/* Orbiting dots representing sessions being planned */}
+                    {[0,1,2,3,4].map(i => {
+                      const angle = (i/5)*Math.PI*2;
+                      const x = 60 + Math.cos(angle)*38;
+                      const y = 50 + Math.sin(angle)*38;
+                      return <circle key={i} cx={x} cy={y} r={4} fill={tpSetup.subject?.accent||"#1E3A5F"} opacity={0.7} style={{ animation:`pulse ${1+i*0.3}s ease-in-out infinite alternate`, animationDelay:`${i*0.2}s` }}/>;
+                    })}
+                  </svg>
+                </div>
+                <div style={{ fontSize:17, fontWeight:900, color:"#1E3A5F", marginBottom:8 }}>
+                  Generating your ideal study strategy
+                </div>
+                {/* Animated step indicators */}
+                {[
+                  tpSetup.materialsB64 ? "📄 Reading your review materials" : "📚 Loading subject curriculum",
+                  "🧠 Analysing your mastery data",
+                  "📅 Computing optimal spacing",
+                  "✨ Calibrating question difficulty",
+                ].map((step, i) => (
+                  <div key={i} style={{ fontSize:12, color:"#9A9490", marginBottom:5, opacity:1, animation:`fade-in .5s ease ${i*0.7}s both` }}>
+                    {step}
+                  </div>
+                ))}
+                <div style={{ marginTop:16, width:"100%", height:4, background:"#E2DDD8", borderRadius:2, overflow:"hidden" }}>
+                  <div style={{ height:"100%", background:tpSetup.subject?.accent||"#1E3A5F", borderRadius:2, animation:"progress-bar 12s ease-out forwards" }}/>
+                </div>
               </div>
+            ) : (
+              <button onClick={async () => {
+                setTpSetup(s=>({...s, generatingPlan:true}));
+                setTpPlanLoading(true);
+                try {
+                  const plan = await generateTestPrepPlan({
+                    subject: tpSetup.subject,
+                    testDate: tpSetup.testDate,
+                    topics: tpSetup.topics,
+                    materialsB64: tpSetup.materialsB64,
+                    materialsType: tpSetup.materialsType,
+                    masteryData: dashboardData,
+                    username: currentUser?.username,
+                  });
+                  const existing = await loadTestPreps(currentUser?.username);
+                  const updated = [...existing, plan];
+                  await saveTestPreps(updated, currentUser?.username);
+                  setTestPreps(updated);
+                  setActiveTestPrep(plan);
+                  setTestPrepScreen("plan");
+                } catch(e) {
+                  setError("Could not generate plan: " + e.message);
+                  setTpSetup(s=>({...s, generatingPlan:false}));
+                  setTpPlanLoading(false);
+                }
+              }} style={{ width:"100%", padding:"13px", background:tpSetup.subject?.accent||"#1E3A5F", border:"none", borderRadius:10, color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer" }}>
+                ✨ Generate Study Plan
+              </button>
             )}
           </div>
         )}
