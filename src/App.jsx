@@ -750,7 +750,7 @@ ${SCHEMA_INSTRUCTIONS}` });
     ][difficulty];
     const chapterScope = hwTopic.bookChapter ? `\nFocus ONLY on: ${hwTopic.bookChapter}. Do not ask about events or characters outside this scope.` : "";
     blocks.push({ type:"text", text:`You are an English literature tutor for a 6th grader.
-Generate exactly 8 multiple-choice questions about: "${hwTopic.bookTitle}"${hwTopic.bookAuthor ? ` by ${hwTopic.bookAuthor}` : ""}.${chapterScope}
+Generate exactly ${qCount} multiple-choice questions about: "${hwTopic.bookTitle}"${hwTopic.bookAuthor ? ` by ${hwTopic.bookAuthor}` : ""}.${chapterScope}
 Cover a mix of: plot comprehension (key events, sequence, cause and effect), character analysis (motivations, relationships, development), and themes/literary devices (symbolism, foreshadowing, author's message).
 Difficulty: ${diffDesc}.
 Keep questions SHORT and clear. All questions must be specific to this book${hwTopic.bookChapter ? " and chapter scope" : ""}.
@@ -764,7 +764,7 @@ ${SCHEMA_INSTRUCTIONS}` });
       "challenging — application, comparison, deeper understanding",
     ][difficulty];
     blocks.push({ type:"text", text:`You are a ${subject?.name || "subject"} tutor for a 6th grader with dyslexia.
-Generate exactly 8 multiple-choice questions specifically about: "${hwTopic.topicName}"
+Generate exactly ${qCount} multiple-choice questions specifically about: "${hwTopic.topicName}"
 Subject area: ${subject?.name || "General"}
 Difficulty: ${diffDesc}.
 Dyslexia rules: SHORT clear question text, no clutter, unambiguous wording. Multiple choice only.
@@ -780,7 +780,7 @@ ${SCHEMA_INSTRUCTIONS}` });
     ][difficulty];
     blocks.push({ type:"text", text:`You are a tutor for a 6th grader with dyslexia.
 Subject: ${subject?.name || "Math"}.
-Generate exactly 8 practice problems on this topic: "${hwTopic.topicName}" — ${hwTopic.description}
+Generate exactly ${qCount} practice problems on this topic: "${hwTopic.topicName}" — ${hwTopic.description}
 Difficulty: ${diffDesc}
 Dyslexia rules: SHORT question text, no clutter, unambiguous wording. Multiple choice only.
 Use topic string: "${hwTopic.topicKey}"
@@ -1121,8 +1121,9 @@ export default function App() {
 
   const startSession = useCallback(async (base64, mediaType, topic) => {
     setError(null); setScreen("loading");
+    setPrefetchedProblems([]); prefetchedRef.current = [];
     try {
-      const probs = await generateProblems(base64, mediaType, difficulty, topic, subject);
+      const probs = await generateProblems(base64, mediaType, difficulty, topic, subject, TIMER_OPTIONS[timerIdx].questionCount);
       if (!Array.isArray(probs)||!probs.length) throw new Error("Got empty problem list");
       setProblems(probs); setIdx(0); setScore(0); setStreak(0); setWrongStreak(0);
       setLog([]); setSelected(null); setSubmitted(false);
@@ -1224,9 +1225,36 @@ export default function App() {
   };
 
   const handleNext = () => {
+    const isInfinite = TIMER_OPTIONS[timerIdx].infinite && timeLeft > 0;
+    if (isInfinite && idx + 1 >= problems.length) {
+      if (prefetchedRef.current.length > 0) {
+        setProblems(prev => [...prev, ...prefetchedRef.current]);
+        setPrefetchedProblems([]); prefetchedRef.current = [];
+      }
+      setIdx((i)=>i+1); setSelected(null); setSubmitted(false);
+      return;
+    }
     if (idx+1>=problems.length) { clearTimer(); setScreen("complete"); return; }
     setIdx((i)=>i+1); setSelected(null); setSubmitted(false);
   };
+
+  // Background prefetch: trigger when 2 questions remain in infinite timed modes
+  useEffect(() => {
+    const timerOpt = TIMER_OPTIONS[timerIdx];
+    if (!timerOpt.infinite || timeLeft <= 0 || problems.length === 0) return;
+    const remaining = problems.length - 1 - idx;
+    if (remaining <= 2 && !isPrefetching && prefetchedRef.current.length === 0) {
+      setIsPrefetching(true);
+      generateProblems(null, null, difficulty, hwTopic, subject, timerOpt.questionCount)
+        .then(newProbs => {
+          if (Array.isArray(newProbs) && newProbs.length > 0) {
+            setPrefetchedProblems(newProbs); prefetchedRef.current = newProbs;
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsPrefetching(false));
+    }
+  }, [idx, problems.length, timerIdx, timeLeft, isPrefetching]);
 
   const sessionSavedRef = useRef(false);
   useEffect(() => {
@@ -2063,10 +2091,10 @@ ${SCHEMA_INSTRUCTIONS}`;
                   style={{ background:"transparent", border:"1px solid #1e1e1e", borderRadius:6, color:"#333", fontSize:11, padding:"4px 10px", cursor:"pointer", letterSpacing:1, fontWeight:700 }}>
                   📖 HELP
                 </button>
-                <span style={S.numMeta}>{idx+1} / {problems.length}</span>
+                <span style={S.numMeta}>{TIMER_OPTIONS[timerIdx].infinite && timeLeft > 0 ? `${idx+1} answered` : `${idx+1} / ${problems.length}`}</span>
               </div>
             </div>
-            <div style={S.prog}><div style={S.progFill((idx/problems.length)*100)} /></div>
+            <div style={S.prog}><div style={S.progFill(TIMER_OPTIONS[timerIdx].infinite && timeLeft > 0 ? 100 : (idx/problems.length)*100)} /></div>
 
             <div style={S.statsRow}>
               <span style={S.scoreLabel}>Score: <span style={S.scoreVal}>{score}</span></span>
@@ -2159,7 +2187,9 @@ ${SCHEMA_INSTRUCTIONS}`;
             <div style={S.btnRow}>
               {!submitted
                 ? <button style={S.primaryBtn(!selected)} onClick={handleSubmit} disabled={!selected}>Check Answer</button>
-                : <button style={S.primaryBtn(false)} onClick={handleNext}>{idx+1>=problems.length?"See Results →":"Next →"}</button>}
+                : <button style={S.primaryBtn(false)} onClick={handleNext}>
+                  {TIMER_OPTIONS[timerIdx].infinite && timeLeft > 0 ? "Next →" : (idx+1>=problems.length ? "See Results →" : "Next →")}
+                </button>}
             </div>
           </div>
         )}
