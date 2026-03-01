@@ -27,8 +27,8 @@ const SUBJECTS = [
     emoji: "📐",
     accent: "#1E3A5F",
     accentDim: "#B8C8D8",
-    bg: "#0d1400",
-    border: "#B8C8D8",
+    bg: "#EEF3FA",
+    border: "#C8D8E8",
     tagline: "Numbers · Fractions · Graphs",
     generalLabel: "Pos/Neg · Graphing · PEMDAS",
     generalPrompt: `Generate exactly 8 math problems covering: positive & negative numbers, graphing on the coordinate plane, order of operations (PEMDAS). Mix all three topics (at least 2 of each).`,
@@ -40,9 +40,9 @@ const SUBJECTS = [
     name: "Science",
     emoji: "🔬",
     accent: "#34d399",
-    accentDim: "#003a22",
-    bg: "#001a10",
-    border: "#00402a",
+    accentDim: "#86efac",
+    bg: "#F0FDF4",
+    border: "#BBF7D0",
     tagline: "Biology · Earth Science · Physics",
     supportsTextTopic: true,
     generalLabel: "Life · Earth · Physical Science",
@@ -55,9 +55,9 @@ const SUBJECTS = [
     name: "Social Studies",
     emoji: "🌍",
     accent: "#fb923c",
-    accentDim: "#3a1800",
-    bg: "#150800",
-    border: "#3a1800",
+    accentDim: "#fed7aa",
+    bg: "#FFF7ED",
+    border: "#FED7AA",
     tagline: "History · Geography · Civics",
     supportsTextTopic: true,
     generalLabel: "History · Geography · Civics",
@@ -70,9 +70,9 @@ const SUBJECTS = [
     name: "Grammar",
     emoji: "✏️",
     accent: "#60a5fa",
-    accentDim: "#001a3a",
-    bg: "#00080f",
-    border: "#00204a",
+    accentDim: "#bfdbfe",
+    bg: "#EFF6FF",
+    border: "#BFDBFE",
     tagline: "Parts of Speech · Punctuation · Writing",
     generalLabel: "Grammar · Punctuation · Style",
     generalPrompt: `Generate exactly 8 grammar and language arts questions for a 6th grader covering: parts of speech (nouns, verbs, adjectives, adverbs), sentence structure (complete sentences, fragments, run-ons), and punctuation/capitalization. Mix all three areas. Write SHORT, clear questions.`,
@@ -84,9 +84,9 @@ const SUBJECTS = [
     name: "Latin",
     emoji: "🏛️",
     accent: "#f472b6",
-    accentDim: "#3a0020",
-    bg: "#150010",
-    border: "#3a0030",
+    accentDim: "#fbcfe8",
+    bg: "#FDF2F8",
+    border: "#FBCFE8",
     tagline: "Vocabulary · Grammar · Translation",
     generalLabel: "Vocab · Grammar · Translation",
     generalPrompt: `Generate exactly 8 Latin language questions for a 6th grader covering: common Latin vocabulary (nouns, verbs, adjectives from typical beginner/LLPSI curriculum), basic grammar (noun cases: nominative/accusative/genitive, present tense verb conjugation), and simple translation (Latin to English short phrases). Mix all three areas. Always include the Latin word or phrase clearly in the question.`,
@@ -98,9 +98,9 @@ const SUBJECTS = [
     name: "English",
     emoji: "📖",
     accent: "#a78bfa",
-    accentDim: "#2a1060",
-    bg: "#0d0820",
-    border: "#2a1a50",
+    accentDim: "#ddd6fe",
+    bg: "#F5F3FF",
+    border: "#DDD6FE",
     tagline: "Literature · Comprehension · Analysis",
     generalLabel: "The Silver Chair · CS Lewis · Narnia",
     generalPrompt: `Generate exactly 8 English literature questions for a 6th grader about "The Silver Chair" by C.S. Lewis (The Chronicles of Narnia). Cover: plot comprehension (key events, chapter sequence, cause and effect), character analysis (Jill, Eustace, Puddleglum, Prince Rilian, the Lady of the Green Kirtle, Aslan), and themes/literary devices (obedience, signs, hope, temptation, symbolism, foreshadowing). Mix all three areas. Keep questions clear and specific to the book.`,
@@ -114,9 +114,9 @@ const SUBJECTS = [
     name: "Religion",
     emoji: "✝️",
     accent: "#fbbf24",
-    accentDim: "#3a2800",
-    bg: "#140e00",
-    border: "#3a2a00",
+    accentDim: "#fde68a",
+    bg: "#FFFBEB",
+    border: "#FDE68A",
     tagline: "Catechism · Faith · Sacraments",
     supportsTextTopic: true,
     generalLabel: "Creed · Sacraments · Commandments",
@@ -226,7 +226,7 @@ function NumberLine({ nld, submitted, isCorrect }) {
   const ticks = Array.from({ length: range + 1 }, (_, i) => min + i);
 
   return (
-    <div style={{ margin: "0 0 20px", background: "#0a0a0a", border: "1px solid #1e1e1e", borderRadius: 10, padding: "12px 0 6px" }}>
+    <div style={{ margin: "0 0 20px", background: "#F8F6F3", border: "1px solid #E2DDD8", borderRadius: 10, padding: "12px 0 6px" }}>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible" }}>
         {/* Axis line */}
         <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="#2a2a2a" strokeWidth={2} />
@@ -289,7 +289,7 @@ function StepReveal({ steps, submitted }) {
       {steps.slice(0, revealed + 1).map((step, i) => {
         const done = i < revealed;
         return (
-          <div key={i} style={{ background: done ? "#0b1f0b" : "#0f1800", border: `1px solid ${done ? "#1a4a1a" : "#2a3a00"}`, borderRadius: 8, padding: "12px 16px", marginBottom: 8, animation: "fade-in .25s ease" }}>
+          <div key={i} style={{ background: done ? "#F0FDF4" : "#F8F6F3", border: `1px solid ${done ? "#BBF7D0" : "#E2DDD8"}`, borderRadius: 8, padding: "12px 16px", marginBottom: 8, animation: "fade-in .25s ease" }}>
             <div style={{ fontSize: 11, color: done ? "#16a34a88" : "#1E3A5F88", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>
               {done ? "✓ Done" : `Step ${i + 1}`}
             </div>
@@ -395,7 +395,7 @@ function OptionTile({ opt, selected, submitted, correct, onClick }) {
 function InsightCard({ insight }) {
   const color = topicColor(insight.topic);
   return (
-    <div style={{ background: "#0c0c0c", border: `1.5px solid ${color}22`, borderRadius: 12, padding: "24px 24px 20px", marginBottom: 16 }}>
+    <div style={{ background: "#FFFFFF", border: `1.5px solid ${color}22`, borderRadius: 12, padding: "24px 24px 20px", marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <span style={{ display:"inline-block", padding:"4px 12px", background:color+"18", border:`1px solid ${color}33`, borderRadius:20, color, fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", whiteSpace:"nowrap" }}>
           {topicLabel(insight.topic)}
@@ -427,14 +427,14 @@ function InsightCard({ insight }) {
 
 // ─── History helpers ──────────────────────────────────────────────────────────
 function TrendBadge({ trend }) {
-  if (trend === "improving") return <span style={{ fontSize:11, fontWeight:800, color:POS_COLOR, background:"#0b1f0b", border:`1px solid ${POS_COLOR}44`, borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>↑ IMPROVING</span>;
-  if (trend === "needs-work") return <span style={{ fontSize:11, fontWeight:800, color:NEG_COLOR, background:"#1f0b0b", border:`1px solid ${NEG_COLOR}44`, borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>↓ NEEDS WORK</span>;
+  if (trend === "improving") return <span style={{ fontSize:11, fontWeight:800, color:POS_COLOR, background:"#F0FDF4", border:`1px solid ${POS_COLOR}44`, borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>↑ IMPROVING</span>;
+  if (trend === "needs-work") return <span style={{ fontSize:11, fontWeight:800, color:NEG_COLOR, background:"#FEF2F2", border:`1px solid ${NEG_COLOR}44`, borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>↓ NEEDS WORK</span>;
   return <span style={{ fontSize:11, fontWeight:800, color:"#6A6560", background:"#F0EEE9", border:"1px solid #E2DDD8", borderRadius:20, padding:"3px 10px", letterSpacing:1 }}>→ STEADY</span>;
 }
 function MiniBar({ value }) {
   const color = value >= 70 ? POS_COLOR : value >= 40 ? "#D97706" : NEG_COLOR;
   return (
-    <div style={{ background:"#141414", borderRadius:3, height:6, overflow:"hidden", flex:1 }}>
+    <div style={{ background:"#F0EEE9", borderRadius:3, height:6, overflow:"hidden", flex:1 }}>
       <div style={{ height:"100%", width:`${value}%`, background:color, borderRadius:3, transition:"width .5s ease" }}/>
     </div>
   );
@@ -831,7 +831,7 @@ function ReferenceCard({ open, onClose }) {
         {/* Number line */}
         <div style={{ marginBottom:18 }}>
           <div style={{ fontSize:10, color:"#333", letterSpacing:2, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>Number Line</div>
-          <div style={{ background:"#0a0a0a", borderRadius:8, padding:"12px 10px" }}>
+          <div style={{ background:"#F8F6F3", borderRadius:8, padding:"12px 10px" }}>
             <svg width="100%" viewBox="0 0 300 36" style={{ display:"block", overflow:"visible" }}>
               <line x1="10" y1="18" x2="290" y2="18" stroke="#2a2a2a" strokeWidth="2"/>
               {[-5,-4,-3,-2,-1,0,1,2,3,4,5].map((v,i) => {
@@ -890,7 +890,7 @@ function ReferenceCard({ open, onClose }) {
               </div>
             ))}
           </div>
-          <div style={{ marginTop:8, fontSize:11, color:"#2a2a2a", textAlign:"center" }}>
+          <div style={{ marginTop:8, fontSize:11, color:"#C0BCB8", textAlign:"center" }}>
             <span style={{ color:"#4ade80" }}>x right = positive</span>
             {"  ·  "}
             <span style={{ color:"#ff6b6b" }}>x left = negative</span>
@@ -1010,7 +1010,7 @@ export default function App() {
       recent.forEach(s => s.log?.forEach(l => { if (!l.ok) missed.add(l.question); }));
       setWeakSpotsCount(missed.size);
     });
-  }, [subject, screen === "upload" ? "upload" : "other"]);
+  }, [subject, screen, currentUser]);
 
   const prob = problems[idx];
   const isCorrect = submitted && selected === prob?.correct;
@@ -1416,7 +1416,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               Your account has been created and is waiting for approval.<br/>
               An admin will activate your account shortly.
             </div>
-            <button onClick={() => setScreen("login")} style={{ width:"100%", padding:"14px", background:"transparent", border:"1.5px solid #2a2a2a", borderRadius:8, color:"#444", fontSize:14, fontWeight:800, cursor:"pointer" }}>
+            <button onClick={() => setScreen("login")} style={{ width:"100%", padding:"14px", background:"transparent", border:"1.5px solid #E2DDD8", borderRadius:8, color:"#9A9490", fontSize:14, fontWeight:800, cursor:"pointer" }}>
               ← Back to Sign In
             </button>
           </div>
@@ -1468,7 +1468,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                 onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
             </div>
 
-            {loginError && <div style={{ background:"#1f0808", border:"1px solid #4a1414", borderRadius:7, padding:"10px 14px", marginBottom:14, color:"#f87171", fontSize:13 }}>{loginError}</div>}
+            {loginError && <div style={{ background:"#FEF2F2", border:"1px solid #4a1414", borderRadius:7, padding:"10px 14px", marginBottom:14, color:"#f87171", fontSize:13 }}>{loginError}</div>}
 
             <button onClick={handleLogin} disabled={loginLoading}
               style={{ width:"100%", padding:"15px", background:loginLoading?"#E2DDD8":"#1E3A5F", border:"none", borderRadius:8, color:loginLoading?"#9A9490":"#FFFFFF", fontSize:16, fontWeight:800, cursor:loginLoading?"default":"pointer", marginBottom:10 }}>
@@ -1577,9 +1577,9 @@ ${SCHEMA_INSTRUCTIONS}`;
                       </div>
                       <div style={{ display:"flex", gap:8 }}>
                         <button onClick={() => handleApproveUser(u.username, true)}
-                          style={{ background:"#0b1f0b", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✓ Approve</button>
+                          style={{ background:"#F0FDF4", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✓ Approve</button>
                         <button onClick={() => handleDeleteUser(u.username)}
-                          style={{ background:"#1f0b0b", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✗ Delete</button>
+                          style={{ background:"#FEF2F2", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✗ Delete</button>
                       </div>
                     </div>
                   ))
@@ -1603,10 +1603,10 @@ ${SCHEMA_INSTRUCTIONS}`;
                     {!u.is_admin && (
                       <div style={{ display:"flex", gap:8 }}>
                         {!u.is_approved
-                          ? <button onClick={() => handleApproveUser(u.username, true)} style={{ background:"#0b1f0b", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Approve</button>
+                          ? <button onClick={() => handleApproveUser(u.username, true)} style={{ background:"#F0FDF4", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Approve</button>
                           : <button onClick={() => handleApproveUser(u.username, false)} style={{ background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:6, color:"#1E3A5F", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Revoke</button>
                         }
-                        <button onClick={() => handleDeleteUser(u.username)} style={{ background:"#1f0b0b", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Delete</button>
+                        <button onClick={() => handleDeleteUser(u.username)} style={{ background:"#FEF2F2", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"5px 10px", cursor:"pointer", fontWeight:800 }}>Delete</button>
                       </div>
                     )}
                   </div>
@@ -1672,15 +1672,15 @@ ${SCHEMA_INSTRUCTIONS}`;
                 {/* Mix */}
                 {topicBank.length >= 2
                   ? <button onClick={startMix}
-                      style={{ background:"#0a0010", border:"1.5px solid #c084fc33", borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor="#c084fc88";e.currentTarget.style.background="#c084fc0a";}}
+                      style={{ background:"#F5F3FF", border:"1.5px solid #c084fc44", borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor="#c084fc88";e.currentTarget.style.background="#EDE9FE";}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor="#c084fc33";e.currentTarget.style.background="#0a0010";}}>
                       <div style={{ fontSize:18, marginBottom:5 }}>🔀</div>
                       <div style={{ fontSize:13, fontWeight:800, color:"#c084fc", lineHeight:1.2 }}>Mix</div>
                       <div style={{ fontSize:10, color:"#3a2a4a", marginTop:3, lineHeight:1.4 }}>Blend {Math.min(3,topicBank.length)} random topics</div>
                     </button>
-                  : <div style={{ background:"#0a0a0a", border:"1.5px dashed #1a1a1a", borderRadius:10, padding:"14px", display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", gap:4 }}>
-                      <div style={{ fontSize:18, opacity:0.3 }}>🔀</div>
+                  : <div style={{ background:"#F8F6F3", border:"1.5px dashed #D0CCC8", borderRadius:10, padding:"14px", display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", gap:4 }}>
+                      <div style={{ fontSize:18, opacity:0.4 }}>🔀</div>
                       <div style={{ fontSize:11, color:"#2a2a2a", textAlign:"center", lineHeight:1.4 }}>Mix unlocks with 2+ topics</div>
                     </div>
                 }
@@ -1728,7 +1728,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               {subject?.supportsBookInput && (
                 <div style={{ border:"1.5px solid #2a1a50", borderRadius:12, overflow:"hidden" }}>
                   <button onClick={() => setShowTextInput(v=>!v)}
-                    style={{ width:"100%", background:"#0d0820", border:"none", padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"background .15s" }}
+                    style={{ width:"100%", background:"#F5F3FF", border:"none", padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"background .15s" }}
                     onMouseEnter={e=>e.currentTarget.style.background="#150d30"}
                     onMouseLeave={e=>e.currentTarget.style.background="#0d0820"}>
                     <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -1741,7 +1741,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     <span style={{ color:"#444", fontSize:12, transform:showTextInput?"rotate(180deg)":"none", transition:"transform .2s" }}>▼</span>
                   </button>
                   {showTextInput && (
-                    <div style={{ background:"#0a0515", padding:"14px 16px", borderTop:"1px solid #1a0a30", animation:"fade-in .15s ease" }}>
+                    <div style={{ background:"#F8F6F3", padding:"14px 16px", borderTop:"1px solid #E2DDD8", animation:"fade-in .15s ease" }}>
                       <input value={bookTitle} onChange={e=>setBookTitle(e.target.value)}
                         placeholder="Book title (e.g. The Hobbit)"
                         style={{ width:"100%", background:"#F8F6F3", border:"1.5px solid #c4b5fd", borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:8, boxSizing:"border-box" }}
@@ -1763,7 +1763,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               {subject?.supportsTextTopic && (
                 <div style={{ border:`1.5px solid ${subject.border}`, borderRadius:12, overflow:"hidden", marginTop:8 }}>
                   <button onClick={() => setShowTextInput(v=>!v)}
-                    style={{ width:"100%", background:subject.bg, border:"none", padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"background .15s" }}
+                    style={{ width:"100%", background:"#F8F6F3", border:"none", padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"background .15s" }}
                     onMouseEnter={e=>e.currentTarget.style.opacity="0.85"}
                     onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                     <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -1776,7 +1776,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     <span style={{ color:"#444", fontSize:12, transform:showTextInput?"rotate(180deg)":"none", transition:"transform .2s" }}>▼</span>
                   </button>
                   {showTextInput && (
-                    <div style={{ background:"#0a0a0a", padding:"14px 16px", borderTop:`1px solid ${subject.border}`, animation:"fade-in .15s ease" }}>
+                    <div style={{ background:"#F8F6F3", padding:"14px 16px", borderTop:`1px solid ${subject.border}`, animation:"fade-in .15s ease" }}>
                       <input value={textTopicInput} onChange={e=>setTextTopicInput(e.target.value)}
                         placeholder={`e.g. "${subject.id === "religion" ? "The Seven Sacraments" : subject.id === "social_studies" ? "Ancient Rome" : "Photosynthesis"}"`}
                         style={{ width:"100%", background:"#F8F6F3", border:`1.5px solid ${subject.border}`, borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
@@ -1806,13 +1806,13 @@ ${SCHEMA_INSTRUCTIONS}`;
             </div>
             {error && error !== "HEIC_CONVERTING" && error !== "HEIC_FAILED" && <div style={S.err}>{error}</div>}
             {error === "HEIC_CONVERTING" && (
-              <div style={{ background:"#0a0f00", border:"1px solid #3a5a00", borderRadius:8, padding:"12px 16px", marginTop:12, display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ background:"#F0FDF4", border:"1px solid #3a5a00", borderRadius:8, padding:"12px 16px", marginTop:12, display:"flex", alignItems:"center", gap:10 }}>
                 <span style={{ fontSize:18, display:"inline-block", animation:"spin 1s linear infinite" }}>⚙</span>
                 <span style={{ fontSize:13, color:"#a0c040", fontWeight:700 }}>Converting iPhone photo…</span>
               </div>
             )}
             {error === "HEIC_FAILED" && (
-              <div style={{ background:"#0f0a00", border:"1px solid #5a3a00", borderRadius:8, padding:"14px 16px", marginTop:12 }}>
+              <div style={{ background:"#FFFBEB", border:"1px solid #5a3a00", borderRadius:8, padding:"14px 16px", marginTop:12 }}>
                 <div style={{ fontSize:13, fontWeight:800, color:"#ffd44d", marginBottom:8 }}>📱 Couldn't convert HEIC automatically</div>
                 <div style={{ fontSize:13, color:"#9a8a00", lineHeight:1.9 }}>
                   <div>• Take a <strong style={{color:"#ffd44d"}}>screenshot</strong> of the homework instead</div>
@@ -1957,7 +1957,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                 {prob.question}
               </div>
               {prob.equation && (
-                <div style={{ background:"#0a0a0a", border:"1px solid #222", borderRadius:10, padding:"16px 20px", display:"inline-block", minWidth:"60%" }}>
+                <div style={{ background:"#F8F6F3", border:"1px solid #222", borderRadius:10, padding:"16px 20px", display:"inline-block", minWidth:"60%" }}>
                   <ColorizedMath text={prob.equation} size={28} weight={800} />
                 </div>
               )}
@@ -2007,7 +2007,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               <div>
                 {/* Challenging: no hint at all */}
                 {difficulty === 2 && (
-                  <div style={{ background:"#120808", border:`1px solid ${NEG_COLOR}33`, borderRadius:8, padding:"12px 16px", marginTop:12, color:NEG_COLOR+"88", fontSize:13, fontWeight:700 }}>
+                  <div style={{ background:"#FEF2F2", border:`1px solid ${NEG_COLOR}33`, borderRadius:8, padding:"12px 16px", marginTop:12, color:NEG_COLOR+"88", fontSize:13, fontWeight:700 }}>
                     ✗ Not quite. Keep thinking — hints are off in Challenging mode.
                   </div>
                 )}
@@ -2017,7 +2017,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     {!showHint && (
                       <button
                         onClick={() => setShowHint(true)}
-                        style={{ width:"100%", padding:"11px", background:"#141000", border:"1px solid #3a3000", borderRadius:8, color:"#7a6a00", fontSize:13, fontWeight:700, cursor:"pointer", letterSpacing:1 }}>
+                        style={{ width:"100%", padding:"11px", background:"#FFFBEB", border:"1px solid #3a3000", borderRadius:8, color:"#7a6a00", fontSize:13, fontWeight:700, cursor:"pointer", letterSpacing:1 }}>
                         💡 Show Hint
                       </button>
                     )}
@@ -2110,7 +2110,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                 <div style={{ marginBottom:28 }}>
                   <div style={S.sectionLabel}>Thematic Trends</div>
                   {trends.map(({topic,status,avg,trend}) => status==="no-data"?null:(
-                    <div key={topic} style={{ background:"#0c0c0c", border:`1px solid ${topicColor(topic)}18`, borderRadius:10, padding:"14px 16px", marginBottom:8 }}>
+                    <div key={topic} style={{ background:"#FFFFFF", border:`1px solid ${topicColor(topic)}18`, borderRadius:10, padding:"14px 16px", marginBottom:8 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8, flexWrap:"wrap" }}>
                         <span style={S.pill(topic)}>{topicLabel(topic)}</span>
                         <TrendBadge trend={trend}/>
@@ -2129,7 +2129,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                   const sp = pct(s.correct, s.total);
                   return (
                     <div key={s.id}>
-                      <div className="session-row" style={{ background:"#0c0c0c", borderRadius:isEx?"10px 10px 0 0":10, border:"1px solid #1a1a1a", padding:"12px 16px", marginBottom:isEx?0:6, cursor:"pointer", transition:"background .15s" }}
+                      <div className="session-row" style={{ background:"#FFFFFF", borderRadius:isEx?"10px 10px 0 0":10, border:"1px solid #1a1a1a", padding:"12px 16px", marginBottom:isEx?0:6, cursor:"pointer", transition:"background .15s" }}
                         onClick={()=>setExpandedSession(isEx?null:s.id)}>
                         <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                           <span style={{ fontFamily:"monospace", fontSize:11, color:"#333", minWidth:155 }}>{fmtDate(s.date)}</span>
@@ -2140,7 +2140,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                         </div>
                       </div>
                       {isEx && (
-                        <div style={{ background:"#0a0a0a", border:"1px solid #1a1a1a", borderTop:"none", borderRadius:"0 0 10px 10px", padding:"14px 16px", marginBottom:6, animation:"fade-in .2s ease" }}>
+                        <div style={{ background:"#F8F6F3", border:"1px solid #1a1a1a", borderTop:"none", borderRadius:"0 0 10px 10px", padding:"14px 16px", marginBottom:6, animation:"fade-in .2s ease" }}>
                           {TOPICS.map((topic) => {
                             const rows = s.log.filter((l)=>l.topic===topic);
                             if (!rows.length) return null;
@@ -2176,7 +2176,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     ? <button style={{ background:"transparent", border:"none", color:"#2a2a2a", fontSize:11, cursor:"pointer", letterSpacing:1, textTransform:"uppercase" }} onClick={()=>setConfirmClear(true)}>Clear all history</button>
                     : <div style={{ display:"flex", gap:8, justifyContent:"center", alignItems:"center" }}>
                         <span style={{ fontSize:12, color:"#555" }}>Are you sure?</span>
-                        <button style={{ background:"#1f0808", border:`1px solid ${NEG_COLOR}44`, borderRadius:6, color:NEG_COLOR, fontSize:12, padding:"5px 12px", cursor:"pointer", fontWeight:700 }} onClick={async()=>{await clearSessions();setSessions([]);setConfirmClear(false);}}>Yes, clear</button>
+                        <button style={{ background:"#FEF2F2", border:`1px solid ${NEG_COLOR}44`, borderRadius:6, color:NEG_COLOR, fontSize:12, padding:"5px 12px", cursor:"pointer", fontWeight:700 }} onClick={async()=>{await clearSessions();setSessions([]);setConfirmClear(false);}}>Yes, clear</button>
                         <button style={{ background:"transparent", border:"1px solid #E2DDD8", borderRadius:6, color:"#444", fontSize:12, padding:"5px 12px", cursor:"pointer" }} onClick={()=>setConfirmClear(false)}>Cancel</button>
                       </div>}
                 </div>
