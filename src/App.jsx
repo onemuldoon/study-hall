@@ -577,8 +577,7 @@ async function generateStudentInsightReport(dashData) {
     .map(s => {
       const d = dashData.subjectSummaries[s.id];
       return `${s.name}: ${d.sessions} sessions, avg ${d.avgScore}%, trend: ${d.trend}, weak areas: ${d.weakTopics.map(w=>w.topic).join(", ")||"none identified"}`;
-    }).join("
-");
+    }).join("\n");
 
   const prompt = `You are an educational advisor preparing a thoughtful progress report for a parent about their child's learning.
 
