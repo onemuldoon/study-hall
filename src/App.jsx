@@ -34,6 +34,84 @@ const TIMER_OPTIONS = [
   { label: "Untimed", seconds: 0,   questionCount: 15, infinite: false },
 ];
 // ─── Subject Config ──────────────────────────────────────────────────────────
+// ─── Subject Icons — stroke-based SVG, Scandinavian minimal ─────────────────
+function SubjectIcon({ id, size = 24, color, strokeWidth = 1.8 }) {
+  const p = { stroke: color, strokeWidth, strokeLinecap: "round", strokeLinejoin: "round", fill: "none" };
+  const vb = "0 0 24 24";
+  switch (id) {
+    case "math": return (
+      // Coordinate axes with rising graph line
+      <svg width={size} height={size} viewBox={vb}>
+        <line x1="3" y1="21" x2="21" y2="21" {...p}/>
+        <line x1="3" y1="3" x2="3" y2="21" {...p}/>
+        <polyline points="3,17 7,11 11,14 16,7 21,5" {...p}/>
+        <polyline points="19,5 21,5 21,7" {...p}/>
+      </svg>
+    );
+    case "science": return (
+      // Erlenmeyer flask
+      <svg width={size} height={size} viewBox={vb}>
+        <path d="M9 3h6M9 3v6L4 19a1 1 0 0 0 .9 1.4h14.2A1 1 0 0 0 20 19L15 9V3" {...p}/>
+        <line x1="5.5" y1="15" x2="18.5" y2="15" {...p}/>
+      </svg>
+    );
+    case "social_studies": return (
+      // Globe with latitude/longitude lines
+      <svg width={size} height={size} viewBox={vb}>
+        <circle cx="12" cy="12" r="9" {...p}/>
+        <ellipse cx="12" cy="12" rx="4" ry="9" {...p}/>
+        <line x1="3" y1="9" x2="21" y2="9" {...p}/>
+        <line x1="3" y1="15" x2="21" y2="15" {...p}/>
+      </svg>
+    );
+    case "grammar": return (
+      // Pen nib writing a line
+      <svg width={size} height={size} viewBox={vb}>
+        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" {...p}/>
+        <line x1="15" y1="5" x2="19" y2="9" {...p}/>
+        <line x1="3" y1="21" x2="7" y2="20" {...p}/>
+      </svg>
+    );
+    case "latin": return (
+      // Classical column
+      <svg width={size} height={size} viewBox={vb}>
+        <rect x="5" y="3" width="14" height="2" rx="0.5" {...p}/>
+        <rect x="5" y="19" width="14" height="2" rx="0.5" {...p}/>
+        <line x1="8" y1="5" x2="8" y2="19" {...p}/>
+        <line x1="12" y1="5" x2="12" y2="19" {...p}/>
+        <line x1="16" y1="5" x2="16" y2="19" {...p}/>
+        <line x1="3" y1="21" x2="21" y2="21" {...p}/>
+      </svg>
+    );
+    case "english": return (
+      // Open book
+      <svg width={size} height={size} viewBox={vb}>
+        <path d="M2 5a2 2 0 0 1 2-2h7v18H4a2 2 0 0 1-2-2V5z" {...p}/>
+        <path d="M22 5a2 2 0 0 0-2-2h-7v18h7a2 2 0 0 0 2-2V5z" {...p}/>
+        <line x1="12" y1="3" x2="12" y2="21" {...p}/>
+        <line x1="6" y1="9" x2="9" y2="9" {...p}/>
+        <line x1="6" y1="13" x2="9" y2="13" {...p}/>
+        <line x1="15" y1="9" x2="18" y2="9" {...p}/>
+        <line x1="15" y1="13" x2="18" y2="13" {...p}/>
+      </svg>
+    );
+    case "religion": return (
+      // Simple cross, slightly proportioned like a Latin cross
+      <svg width={size} height={size} viewBox={vb}>
+        <line x1="12" y1="2" x2="12" y2="22" {...p}/>
+        <line x1="4" y1="8" x2="20" y2="8" {...p}/>
+      </svg>
+    );
+    default: return (
+      <svg width={size} height={size} viewBox={vb}>
+        <circle cx="12" cy="12" r="9" {...p}/>
+        <line x1="12" y1="8" x2="12" y2="16" {...p}/>
+        <line x1="8" y1="12" x2="16" y2="12" {...p}/>
+      </svg>
+    );
+  }
+}
+
 const SUBJECTS = [
   {
     id: "math",
@@ -2563,7 +2641,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                   style={{ background:sub.bg, border:`1.5px solid ${sub.border}`, borderRadius:12, padding:"18px 16px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, transform .1s" }}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=sub.accent+"88";e.currentTarget.style.transform="translateY(-1px)";}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=sub.border;e.currentTarget.style.transform="none";}}>
-                  <div style={{ fontSize:28, marginBottom:8 }}>{sub.emoji}</div>
+                  <div style={{ marginBottom:10, display:"flex", justifyContent:"center" }}><SubjectIcon id={sub.id} size={32} color={sub.accent} strokeWidth={1.6}/></div>
                   <div style={{ fontSize:16, fontWeight:800, color:sub.accent, marginBottom:4 }}>{sub.name}</div>
                   <div style={{ fontSize:10, color:sub.accentDim, lineHeight:1.5 }}>{sub.tagline}</div>
                 </button>
@@ -2712,7 +2790,7 @@ ${SCHEMA_INSTRUCTIONS}`;
           <div style={S.card}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <button onClick={() => setScreen("subjects")} style={{ background:"transparent", border:"none", color:"#444", fontSize:18, cursor:"pointer", padding:"0 4px", lineHeight:1 }}>←</button>
-              <div style={{ ...S.logo, marginBottom:0 }}>{subject?.emoji} {subject?.name || "Practice"}</div>
+              <div style={{ ...S.logo, marginBottom:0 }}><SubjectIcon id={subject?.id} size={16} color={subject?.accent||"#1E3A5F"} strokeWidth={1.8}/> {subject?.name || "Practice"}</div>
             </div>
             <div style={S.h1}>{(subject?.name || "MATH").toUpperCase()} TUTOR</div>
 
@@ -2726,7 +2804,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                   style={{ background:"#FFFFFF", border:`1.5px solid ${subject?.border||"#E2DDD8"}`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=subject?.accent+"66"||"#1E3A5F66";e.currentTarget.style.background=subject?.bg||"#F8F6F3";}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=subject?.border||"#2a2a2a";e.currentTarget.style.background="#FFFFFF";}}>
-                  <div style={{ fontSize:18, marginBottom:5 }}>{subject?.emoji||"📐"}</div>
+                  <div style={{ fontSize:18, marginBottom:5 }}><SubjectIcon id={subject?.id||"math"} size={32} color={subject?.accent||"#1E3A5F"} strokeWidth={1.5}/></div>
                   <div style={{ fontSize:13, fontWeight:800, color:subject?.accent||"#1E3A5F", lineHeight:1.2 }}>General</div>
                   <div style={{ fontSize:10, color:"#3a3a3a", marginTop:3, lineHeight:1.4 }}>{subject?.generalLabel||"Mixed topics"}</div>
                 </button>
@@ -3116,7 +3194,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                         if (!s?.sessions) return (
                           <div key={sub.id} style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"12px 14px", opacity:0.5 }}>
                             <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
-                              <span style={{ fontSize:16 }}>{sub.emoji}</span>
+                              <SubjectIcon id={sub.id} size={18} color="#C0BCB8" strokeWidth={1.6}/>
                               <div style={{ fontSize:12, fontWeight:800, color:"#C0BCB8" }}>{sub.name}</div>
                             </div>
                             <div style={{ fontSize:10, color:"#C0BCB8" }}>No sessions yet</div>
@@ -3130,7 +3208,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                             onClick={() => { setDashboardTab("subjects"); setDashboardSubject(sub.id); }}>
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
                               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                                <span style={{ fontSize:16 }}>{sub.emoji}</span>
+                                <SubjectIcon id={sub.id} size={18} color={sub.accent} strokeWidth={1.6}/>
                                 <div style={{ fontSize:12, fontWeight:800, color:sub.accent }}>{sub.name}</div>
                               </div>
                               <span style={{ fontSize:13, fontWeight:800, color:trendColor }}>{trendIcon}</span>
@@ -3215,7 +3293,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                         const sub = SUBJECTS.find(sb => sb.id === s.subjectId);
                         return (
                           <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid #F0EEE9" }}>
-                            <span style={{ fontSize:18 }}>{sub?.emoji||"📚"}</span>
+                            <span style={{ fontSize:18 }}><SubjectIcon id={s.subjectId} size={20} color={sub?.accent||"#1E3A5F"} strokeWidth={1.7}/></span>
                             <div style={{ flex:1, minWidth:0 }}>
                               <div style={{ fontSize:13, fontWeight:700, color:"#1E3A5F" }}>{s.subjectName}</div>
                               <div style={{ fontSize:10, color:"#C0BCB8" }}>{new Date(s.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
@@ -3242,7 +3320,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     {SUBJECTS.map(sub => (
                       <button key={sub.id} onClick={() => setDashboardSubject(sub.id)}
                         style={{ padding:"6px 14px", background:dashboardSubject===sub.id?sub.accent:"transparent", border:`1.5px solid ${dashboardSubject===sub.id?sub.accent:sub.border}`, borderRadius:20, color:dashboardSubject===sub.id?"#fff":sub.accent, fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                        {sub.emoji} {sub.name}
+                        <SubjectIcon id={sub.id} size={14} color={dashboardSubject===sub.id?"#fff":sub.accent} strokeWidth={1.8}/> {sub.name}
                       </button>
                     ))}
                   </div>
@@ -3252,7 +3330,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     if (!s?.sessions) return (
                       <div key={sub.id} style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:10, padding:"16px 18px", marginBottom:12, opacity:0.55 }}>
                         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                          <span style={{ fontSize:18 }}>{sub.emoji}</span>
+                          <SubjectIcon id={sub.id} size={20} color="#C0BCB8" strokeWidth={1.6}/>
                           <div style={{ fontSize:14, fontWeight:800, color:"#C0BCB8" }}>{sub.name} — No sessions yet</div>
                         </div>
                       </div>
@@ -3262,7 +3340,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                       <div key={sub.id} style={{ background:"#FFFFFF", border:`1.5px solid ${sub.border}`, borderRadius:12, padding:"18px 20px", marginBottom:16 }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
                           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                            <span style={{ fontSize:20 }}>{sub.emoji}</span>
+                            <SubjectIcon id={sub.id} size={22} color={sub.accent} strokeWidth={1.6}/>
                             <div>
                               <div style={{ fontSize:16, fontWeight:800, color:sub.accent }}>{sub.name}</div>
                               <div style={{ fontSize:10, color:sub.accentDim }}>{s.sessions} sessions · {s.totalQuestions} questions · {Math.round((s.totalTimeSeconds||0)/60)} min</div>
