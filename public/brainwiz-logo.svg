@@ -1,0 +1,17 @@
+<svg width="120" height="132" viewBox="0 0 100 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wizard hat -->
+  <ellipse cx="50" cy="58" rx="30" ry="5" stroke="#1E3A5F" stroke-width="3.5" fill="#E8F0F8" stroke-linecap="round"/>
+  <path d="M50 10 L30 58 Q50 54 70 58 Z" fill="#E8F0F8" stroke="#1E3A5F" stroke-width="3.5" stroke-linejoin="round"/>
+  <!-- Brain lobes -->
+  <path d="M36 62 Q28 70 32 78 Q36 86 42 82 Q46 88 50 84 Q54 88 58 82 Q64 86 68 78 Q72 70 64 62" stroke="#1E3A5F" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Brain center line -->
+  <line x1="50" y1="63" x2="50" y2="83" stroke="#1E3A5F" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Brain bumps left -->
+  <path d="M36 68 Q32 64 36 62" stroke="#1E3A5F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M36 76 Q30 72 34 68" stroke="#1E3A5F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Brain bumps right -->
+  <path d="M64 68 Q68 64 64 62" stroke="#1E3A5F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M64 76 Q70 72 66 68" stroke="#1E3A5F" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Green sparkle -->
+  <path d="M68 12 L70 18 L76 16 L70 22 L72 28 L66 22 L60 26 L64 20 L58 16 L64 14 Z" fill="#2BC48A" opacity="0.9"/>
+</svg>
