@@ -1780,6 +1780,22 @@ async function saveTestPreps(preps, username) {
   } catch(e) { console.error("saveTestPreps error", e); }
 }
 
+// Admin-assigned test preps — stored in shared storage, keyed by student username
+function assignedPrepKey(studentUsername) { return `assigned-preps-${studentUsername}`; }
+
+async function loadAssignedPreps(studentUsername) {
+  try {
+    const r = await storage.get(assignedPrepKey(studentUsername), true); // shared=true
+    return r ? JSON.parse(r.value) : [];
+  } catch { return []; }
+}
+
+async function saveAssignedPreps(preps, studentUsername) {
+  try {
+    await storage.set(assignedPrepKey(studentUsername), JSON.stringify(preps), true); // shared=true
+  } catch(e) { console.error("saveAssignedPreps error", e); }
+}
+
 async function loadCurriculum(subjectId) {
   try {
     const r = await storage.get(curriculumKey(subjectId), true); // shared=true
@@ -2154,6 +2170,69 @@ ${SCHEMA_INSTRUCTIONS}` });
   return JSON.parse(match[0]);
 }
 
+// ─── Post-session debrief — explains each wrong answer specifically ──────────
+async function generateDebrief(sessionLog, subjectName, topicName) {
+  const wrong = sessionLog.filter(l => !l.ok);
+  // Build the debrief purely from question data if all tips/explanations present
+  const allHaveTips = wrong.length > 0 && wrong.every(l => l.tip || l.explanation);
+
+  // Items we can show immediately from question metadata
+  const items = wrong.map(l => ({
+    question:    l.question,
+    selected:    l.selected,
+    correct:     l.correct,
+    tip:         l.tip || null,
+    explanation: l.explanation || null,
+    topic:       l.topic,
+  }));
+
+  // Ask AI for a brief pattern analysis + fill any missing explanations
+  const needsAI = !allHaveTips || wrong.length > 0;
+  if (!needsAI || wrong.length === 0) return { summary: null, items };
+
+  const wrongSummary = wrong.map((l, i) =>
+    `${i+1}. Q: "${l.question}"
+   Student answered: "${l.selected}"
+   Correct: "${l.correct}"${l.tip ? `
+   Built-in tip: "${l.tip}"` : ""}${l.explanation ? `
+   Explanation: "${l.explanation}"` : ""}`
+  ).join("
+
+");
+
+  const prompt = `A 6th grader just completed a ${subjectName} session on "${topicName}". They got ${sessionLog.filter(l=>l.ok).length}/${sessionLog.length} correct.
+
+MISSED QUESTIONS:
+${wrongSummary}
+
+Write a concise, encouraging debrief for the student (NOT the parent). Use simple language, no jargon.
+
+Return ONLY valid JSON:
+{
+  "summary": "1-2 sentence overview of what went wrong and the key pattern — specific, not generic. Example: 'You mixed up multiplication and addition when parentheses were involved — that's a classic PEMDAS trap.'",
+  "items": [
+    {
+      "question": "exact question text",
+      "selected": "what student picked",
+      "correct": "correct answer",
+      "explanation": "1 sentence: WHY the correct answer is right, in plain language a 6th grader gets",
+      "memory": "1 short memorable hook, tip, or mnemonic to prevent this mistake next time"
+    }
+  ]
+}`;
+
+  const res = await callAPI([{ type:"text", text:prompt }], 900);
+  if (!res.ok) return { summary:null, items };
+  const data = JSON.parse(await res.text());
+  const raw = data.content?.find(b=>b.type==="text")?.text||"";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return { summary:null, items };
+  try {
+    const parsed = JSON.parse(match[0]);
+    return parsed;
+  } catch { return { summary:null, items }; }
+}
+
 async function generateInsights(sessionLog) {
   // Group wrong answers by topic, capturing full detail
   const wrongByTopic = {};
@@ -2359,6 +2438,7 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [wrongStreak, setWrongStreak] = useState(0);
+  const [diffToast, setDiffToast] = useState(null); // {msg, color} shown briefly when difficulty changes
   const [difficulty, setDifficulty] = useState(0);
   const [log, setLog] = useState([]);
   const [error, setError] = useState(null);
@@ -2373,6 +2453,10 @@ export default function App() {
 
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  // Post-session debrief (auto-generated inline on complete screen)
+  const [debrief, setDebrief] = useState(null);        // {summary, items:[{question,selected,correct,explanation,tip}]}
+  const [debriefLoading, setDebriefLoading] = useState(false);
+  const [debriefOpen, setDebriefOpen] = useState(false); // expanded/collapsed
   const [insightsError, setInsightsError] = useState(null);
 
   // Homework confirmation flow
@@ -2445,6 +2529,8 @@ export default function App() {
   const [adminNewDisplay, setAdminNewDisplay] = useState("");
   const [adminNewIsAdmin, setAdminNewIsAdmin] = useState(false);
   const [adminMsg, setAdminMsg] = useState("");
+  const [adminAssignPrepStudent, setAdminAssignPrepStudent] = useState(null); // student being assigned a prep
+  const [adminAssignPrepBuilding, setAdminAssignPrepBuilding] = useState(false);
 
   const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
   useEffect(() => () => clearTimer(), []);
@@ -2595,9 +2681,24 @@ export default function App() {
     if (!selected) return;
     setSubmitted(true);
     const ok = selected === prob.correct;
-    const entry = { topic:prob.topic, ok, question:prob.question, selected, correct:prob.correct };
-    if (ok) { const ns=streak+1; setStreak(ns); setWrongStreak(0); setScore((s)=>s+1); if(ns>=3&&difficulty<2) setDifficulty((d)=>d+1); }
-    else { const nw=wrongStreak+1; setWrongStreak(nw); setStreak(0); if(nw>=2&&difficulty>0) setDifficulty((d)=>d-1); }
+    const entry = { topic:prob.topic, ok, question:prob.question, selected, correct:prob.correct, tip:prob.tip||null, explanation:prob.explanation||null, difficulty };
+    if (ok) {
+      const ns = streak + 1; setStreak(ns); setWrongStreak(0); setScore(s => s+1);
+      if (ns >= 3 && difficulty < 2) {
+        setDifficulty(d => d+1);
+        const nextLabel = DIFFICULTY_LABELS[Math.min(difficulty+1,2)];
+        setDiffToast({ msg:`📈 Stepping up to ${nextLabel}`, color:"#16a34a" });
+        setTimeout(() => setDiffToast(null), 2800);
+      }
+    } else {
+      const nw = wrongStreak + 1; setWrongStreak(nw); setStreak(0);
+      if (nw >= 2 && difficulty > 0) {
+        setDifficulty(d => d-1);
+        const nextLabel = DIFFICULTY_LABELS[Math.max(difficulty-1,0)];
+        setDiffToast({ msg:`📉 Adjusting to ${nextLabel}`, color:"#D97706" });
+        setTimeout(() => setDiffToast(null), 2800);
+      }
+    }
     setLog((l) => [...l, entry]);
   };
 
@@ -2657,6 +2758,18 @@ export default function App() {
       // Ingest session questions into SRS system
       ingestSessionToSrs(log, subject?.id||"math", hwTopic?.topicKey||"general", currentUser?.username)
         .then(() => loadSrsCards(currentUser?.username).then(setSrsCards));
+
+      // Auto-generate debrief for missed questions
+      const wrongInSession = log.filter(l => !l.ok);
+      if (wrongInSession.length > 0) {
+        setDebrief(null); setDebriefOpen(false); setDebriefLoading(true);
+        generateDebrief(log, subject?.name||"this subject", hwTopic?.topicName||"this topic")
+          .then(d => { setDebrief(d); setDebriefOpen(true); })
+          .catch(() => {})
+          .finally(() => setDebriefLoading(false));
+      } else {
+        setDebrief(null); setDebriefLoading(false); setDebriefOpen(false);
+      }
 
       // If this session was part of a test prep, mark it complete
       if (activeTestPrep) {
@@ -2749,7 +2862,15 @@ export default function App() {
       if (result.pendingApproval) { setScreen("pending"); return; }
       setCurrentUser(result.user);
       setLoginUsername(""); setLoginPassword(""); setLoginDisplayName(""); setLoginError("");
-      loadTestPreps(result.user.username).then(setTestPreps);
+      // Load both own preps and any admin-assigned preps
+      Promise.all([
+        loadTestPreps(result.user.username),
+        loadAssignedPreps(result.user.username),
+      ]).then(([own, assigned]) => {
+        const merged = [...own];
+        assigned.forEach(a => { if (!merged.find(p => p.id === a.id)) merged.push({ ...a, _assigned: true }); });
+        setTestPreps(merged);
+      });
       setScreen("subjects");
     } finally {
       setLoginLoading(false);
@@ -3111,6 +3232,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     <div style={{ flex:1 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
                         <span style={{ fontSize:11, background:accent, color:"#fff", borderRadius:4, padding:"2px 7px", fontWeight:800, letterSpacing:1 }}>TEST PREP</span>
+                        {prep._assigned && <span style={{ fontSize:9, background:"#F0FDF4", border:"1px solid #86efac", borderRadius:4, padding:"2px 6px", color:"#16a34a", fontWeight:800 }}>Assigned by teacher</span>}
                         <span style={{ fontSize:13, fontWeight:800, color:accent }}>{prep.planTitle}</span>
                       </div>
                       <div style={{ fontSize:11, color:"#9A9490" }}>
@@ -3242,6 +3364,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                           style={{ background:"#F0FDF4", border:"1px solid #4ade8044", borderRadius:6, color:"#4ade80", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✓ Approve</button>
                         <button onClick={() => handleDeleteUser(u.username)}
                           style={{ background:"#FEF2F2", border:"1px solid #ff6b6b44", borderRadius:6, color:"#ff6b6b", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>✗ Delete</button>
+                        <button onClick={() => setAdminAssignPrepStudent(u)} style={{ background:"#EEF3FA", border:"1px solid #1E3A5F33", borderRadius:6, color:"#1E3A5F", fontSize:12, padding:"6px 12px", cursor:"pointer", fontWeight:800 }}>📋 Assign Prep</button>
                       </div>
                     </div>
                   ))
@@ -3519,6 +3642,102 @@ ${SCHEMA_INSTRUCTIONS}`;
                         </div>
                       ))
                   }
+                </div>
+              );
+            })()}
+
+            {/* ── Admin: Assign Test Prep Modal ── */}
+            {adminAssignPrepStudent && (() => {
+              const student = adminAssignPrepStudent;
+              const handleAssign = async (subjectId) => {
+                setAdminAssignPrepBuilding(true);
+                try {
+                  const sub = SUBJECTS.find(s => s.id === subjectId);
+                  // Load student's mastery data for calibration
+                  const studentSessions = await loadSessions(subjectId, student.username);
+                  const plan = await generateTestPrepPlan({
+                    subject: sub,
+                    testDate: tpSetup.testDate || new Date(Date.now() + 5*86400000).toISOString().split("T")[0],
+                    topics: tpSetup.topics || [],
+                    materialsB64: tpSetup.materialsB64 || null,
+                    materialsType: tpSetup.materialsType || null,
+                    masteryData: null,
+                    username: currentUser?.username,
+                  });
+                  plan._assignedBy = currentUser?.username;
+                  plan._assignedTo = student.username;
+                  // Save to student's assigned preps (shared storage)
+                  const existing = await loadAssignedPreps(student.username);
+                  await saveAssignedPreps([...existing, plan], student.username);
+                  setAdminMsg(`✓ Test prep plan assigned to ${student.display_name}`);
+                  setAdminAssignPrepStudent(null);
+                  setTpSetup(s => ({...s, testDate:"", topics:[], materialsB64:null, materialsType:null}));
+                } catch(e) {
+                  setAdminMsg("Error: " + e.message);
+                } finally {
+                  setAdminAssignPrepBuilding(false);
+                }
+              };
+
+              return (
+                <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"#000a", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+                  onClick={() => setAdminAssignPrepStudent(null)}>
+                  <div style={{ background:"#1a1a1a", border:"1px solid #333", borderRadius:16, padding:20, maxWidth:420, width:"100%", animation:"fade-in .25s ease" }}
+                    onClick={e => e.stopPropagation()}>
+                    <div style={{ fontSize:14, fontWeight:800, color:"#fff", marginBottom:4 }}>Assign Test Prep</div>
+                    <div style={{ fontSize:11, color:"#9A9490", marginBottom:16 }}>For: {student.display_name} (@{student.username})</div>
+
+                    {/* Test date */}
+                    <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>Test Date</div>
+                    <input type="date" value={tpSetup.testDate}
+                      min={new Date().toISOString().split("T")[0]}
+                      max={new Date(Date.now()+14*86400000).toISOString().split("T")[0]}
+                      onChange={e => setTpSetup(s=>({...s, testDate:e.target.value}))}
+                      style={{ width:"100%", padding:"8px 10px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#fff", fontSize:13, marginBottom:14, boxSizing:"border-box" }}/>
+
+                    {/* Topics */}
+                    <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>Topics (optional)</div>
+                    <div style={{ display:"flex", gap:6, marginBottom:14 }}>
+                      <input value={tpSetup.topicInput||""} onChange={e => setTpSetup(s=>({...s, topicInput:e.target.value}))}
+                        onKeyDown={e => { if (e.key==="Enter" && (tpSetup.topicInput||"").trim()) setTpSetup(s=>({...s, topics:[...s.topics, s.topicInput.trim()], topicInput:""})); }}
+                        placeholder="Type topic + Enter"
+                        style={{ flex:1, padding:"8px 10px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#fff", fontSize:12 }}/>
+                      <button onClick={() => { if ((tpSetup.topicInput||"").trim()) setTpSetup(s=>({...s, topics:[...s.topics, s.topicInput.trim()], topicInput:""})); }}
+                        style={{ padding:"8px 12px", background:"#1E3A5F", border:"none", borderRadius:6, color:"#fff", fontWeight:800, cursor:"pointer" }}>+</button>
+                    </div>
+                    {tpSetup.topics?.length > 0 && (
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:14 }}>
+                        {tpSetup.topics.map((t,i) => (
+                          <span key={i} style={{ background:"#1E3A5F22", border:"1px solid #1E3A5F44", borderRadius:20, padding:"3px 8px", fontSize:11, color:"#60a5fa", display:"flex", alignItems:"center", gap:4 }}>
+                            {t} <button onClick={() => setTpSetup(s=>({...s, topics:s.topics.filter((_,j)=>j!==i)}))} style={{ background:"none", border:"none", color:"#60a5fa", cursor:"pointer", fontSize:12, padding:0 }}>×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Subject selection + generate */}
+                    <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Select Subject to Generate Plan</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                      {SUBJECTS.map(sub => (
+                        <button key={sub.id}
+                          disabled={!tpSetup.testDate || adminAssignPrepBuilding}
+                          onClick={() => handleAssign(sub.id)}
+                          style={{ padding:"8px 10px", background:sub.accent+"18", border:`1px solid ${sub.accent}44`, borderRadius:8, cursor:!tpSetup.testDate||adminAssignPrepBuilding?"not-allowed":"pointer", display:"flex", alignItems:"center", gap:6, opacity:!tpSetup.testDate?0.4:1 }}>
+                          <SubjectIcon id={sub.id} size={14} color={sub.accent} strokeWidth={1.8}/>
+                          <span style={{ fontSize:12, fontWeight:800, color:sub.accent }}>{sub.name}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {adminAssignPrepBuilding && (
+                      <div style={{ textAlign:"center", padding:"12px 0 0", fontSize:12, color:"#9A9490" }}>🧠 Generating plan…</div>
+                    )}
+
+                    <button onClick={() => setAdminAssignPrepStudent(null)}
+                      style={{ width:"100%", marginTop:14, padding:"9px", background:"transparent", border:"1px solid #3a3a3a", borderRadius:8, color:"#9A9490", fontSize:12, cursor:"pointer" }}>
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               );
             })()}
@@ -4813,7 +5032,13 @@ ${SCHEMA_INSTRUCTIONS}`;
         )}
 
         {screen === "problem" && prob && (
-          <div style={S.card}>
+          <div style={{ ...S.card, position:"relative" }}>
+            {/* ── Adaptive difficulty toast ── */}
+            {diffToast && (
+              <div style={{ position:"absolute", top:12, left:"50%", transform:"translateX(-50%)", zIndex:100, background:diffToast.color, color:"#fff", padding:"7px 16px", borderRadius:20, fontSize:12, fontWeight:800, whiteSpace:"nowrap", boxShadow:"0 4px 16px #0003", animation:"fade-in .3s ease" }}>
+                {diffToast.msg}
+              </div>
+            )}
             {timeTotal > 0 && (<>
               <div style={S.timerBar}><div style={S.timerFill(timerPct, isLowTime)} /></div>
               <div style={{ ...S.timerText(isLowTime), animation:isLowTime?"pulse-red 1s ease-in-out infinite":"none" }}>{fmt(timeLeft)}</div>
@@ -4981,8 +5206,65 @@ ${SCHEMA_INSTRUCTIONS}`;
                 :score>=log.length*.5?"Good effort — check the tips below."
                 :"Every session builds the skill. Keep going!"}
             </div>
+            {/* ── Post-session debrief panel ── */}
+            {log.some(l => !l.ok) && (
+              <div style={{ marginBottom:16 }}>
+                <button onClick={() => setDebriefOpen(o => !o)}
+                  style={{ width:"100%", padding:"11px 14px", background: debriefOpen?"#1E3A5F":"#EEF3FA", border:"1.5px solid #1E3A5F33", borderRadius:10, color: debriefOpen?"#fff":"#1E3A5F", fontSize:13, fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", transition:"all .2s" }}>
+                  <span>📋 Session Debrief {debriefLoading ? "— Analysing…" : debrief ? `— ${log.filter(l=>!l.ok).length} missed` : ""}</span>
+                  <span style={{ fontSize:11, opacity:0.7 }}>{debriefOpen ? "▲ Hide" : "▼ Show"}</span>
+                </button>
+
+                {debriefOpen && (
+                  <div style={{ background:"#F8F6F3", border:"1px solid #E2DDD8", borderRadius:"0 0 10px 10px", padding:"14px", animation:"fade-in .3s ease" }}>
+                    {debriefLoading && (
+                      <div style={{ textAlign:"center", padding:"16px 0", color:"#9A9490" }}>
+                        <div style={{ fontSize:22, marginBottom:6, display:"inline-block", animation:"spin 1.2s linear infinite" }}>⚙</div>
+                        <div style={{ fontSize:12 }}>Reading your session…</div>
+                      </div>
+                    )}
+                    {!debriefLoading && debrief && (
+                      <>
+                        {debrief.summary && (
+                          <div style={{ background:"#1E3A5F", borderRadius:8, padding:"10px 12px", marginBottom:12, color:"#fff", fontSize:13, lineHeight:1.6 }}>
+                            {debrief.summary}
+                          </div>
+                        )}
+                        {(debrief.items||[]).map((item, i) => (
+                          <div key={i} style={{ background:"#fff", border:"1px solid #E2DDD8", borderRadius:8, padding:"12px", marginBottom:8 }}>
+                            <div style={{ fontSize:12, color:"#555", marginBottom:6, lineHeight:1.5 }}>
+                              <span style={{ fontWeight:800, color:"#1E3A5F" }}>Q: </span>{item.question}
+                            </div>
+                            <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                              <div style={{ flex:1, minWidth:120, background:"#FEF2F2", border:"1px solid #fca5a544", borderRadius:6, padding:"5px 8px" }}>
+                                <div style={{ fontSize:9, color:"#dc2626", fontWeight:800, letterSpacing:1, marginBottom:2 }}>YOU ANSWERED</div>
+                                <div style={{ fontSize:12, color:"#dc2626", fontWeight:700 }}>{item.selected}</div>
+                              </div>
+                              <div style={{ flex:1, minWidth:120, background:"#F0FDF4", border:"1px solid #86efac44", borderRadius:6, padding:"5px 8px" }}>
+                                <div style={{ fontSize:9, color:"#16a34a", fontWeight:800, letterSpacing:1, marginBottom:2 }}>CORRECT</div>
+                                <div style={{ fontSize:12, color:"#16a34a", fontWeight:700 }}>{item.correct}</div>
+                              </div>
+                            </div>
+                            {item.explanation && (
+                              <div style={{ fontSize:12, color:"#555", lineHeight:1.6, marginBottom:item.memory?6:0 }}>
+                                {item.explanation}
+                              </div>
+                            )}
+                            {item.memory && (
+                              <div style={{ background:"#FFF7ED", border:"1px solid #fed7aa", borderRadius:6, padding:"6px 9px", fontSize:11, color:"#92400e", fontWeight:700 }}>
+                                💡 {item.memory}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={S.btnRow}>
-              {log.some((l)=>!l.ok) && <button style={S.accentBtn} onClick={()=>handleViewInsights(log)}>Learning Opportunities →</button>}
               <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Go Again</button>
             </div>
             <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8 }}>
