@@ -2,6 +2,9 @@
 // Vercel serverless function — keeps the Anthropic API key server-side.
 // The browser calls /api/claude instead of api.anthropic.com directly.
 
+// Extend Vercel function timeout to 60s — Claude can take 20-30s for large responses
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
