@@ -2158,7 +2158,9 @@ Dyslexia rules: SHORT question text, no clutter, unambiguous wording. Multiple c
 ${SCHEMA_INSTRUCTIONS}` });
   }
 
-  const res = await callAPI([{ role:"user", content:blocks }]);
+  // Token budget: ~300 tokens per question + 400 overhead, min 2000
+  const tokenBudget = Math.max(2000, qCount * 300 + 400);
+  const res = await callAPI([{ role:"user", content:blocks }], tokenBudget);
   const text = await res.text();
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0,400)}`);
   let data;
@@ -2591,6 +2593,7 @@ export default function App() {
       setProblems(probs); setIdx(0); setScore(0); setStreak(0); setWrongStreak(0);
       setLog([]); setSelected(null); setSubmitted(false);
       setInsights(null); setInsightsError(null);
+      setDebrief(null); setDebriefLoading(false); setDebriefOpen(false);
       startTimer(TIMER_OPTIONS[timerIdx].seconds);
       setScreen("problem");
     } catch(err) { setError(err.message||"Unknown error"); setScreen("upload"); }
