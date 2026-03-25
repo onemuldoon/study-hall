@@ -2036,7 +2036,7 @@ MATH VISUALS:
 "visual": {"type":"geometry","shape":"rectangle","sides":["8 m","3 m","8 m","3 m"]}
 "visual": {"type":"geometry","shape":"circle","sides":["6 cm"]}
 "visual": {"type":"geometry","shape":"trapezoid","sides":["8 cm","13 cm","5 cm","5 cm"],"height":"6 cm"}
-  — sides order: [top_base, bottom_base, left_leg, right_leg]; height is the perpendicular height
+  // sides order: [top_base, bottom_base, left_leg, right_leg]; height is perpendicular height
 
 SCIENCE VISUALS:
 "visual": {"type":"bar_chart","title":"Plant Growth","bars":[{"label":"Week 1","value":3},{"label":"Week 2","value":7}],"yLabel":"Height (cm)","highlightBar":"Week 2"}
