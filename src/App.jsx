@@ -2241,9 +2241,7 @@ async function generateDebrief(sessionLog, subjectName, topicName) {
    Correct: "${l.correct}"${l.tip ? `
    Built-in tip: "${l.tip}"` : ""}${l.explanation ? `
    Explanation: "${l.explanation}"` : ""}`
-  ).join("
-
-");
+  ).join("\n\n");
 
   const prompt = `A 6th grader just completed a ${subjectName} session on "${topicName}". They got ${sessionLog.filter(l=>l.ok).length}/${sessionLog.length} correct.
 
