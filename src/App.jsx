@@ -881,6 +881,44 @@ function GeometryShape({ v }) {
       shapeEl = <>{shapeEl}<line x1={cx} y1={cy} x2={cx+r} y2={cy} stroke={color} strokeWidth={1.5} strokeDasharray="4,3"/>
         <text x={cx+r/2} y={cy-8} textAnchor="middle" fill="#555" fontSize={13} fontWeight={700}>{sides[0]}</text></>;
     }
+  } else if (shape === "trapezoid") {
+    // sides: [top_base, bottom_base, left_leg, right_leg]  height: string
+    const { height } = v;
+    const bW = 176, tW = 108, th = 108;
+    const bY = cy + th/2, tY = cy - th/2;
+    const bL = cx - bW/2, bR = cx + bW/2;
+    const tL = cx - tW/2, tR = cx + tW/2;
+    const pts = [[tL,tY],[tR,tY],[bR,bY],[bL,bY]];
+    const d = pts.map((p,i)=>`${i===0?"M":"L"}${p[0]},${p[1]}`).join(" ")+"Z";
+    shapeEl = <path d={d} fill={color+"15"} stroke={color} strokeWidth={2.5} strokeLinejoin="round"/>;
+    // top base label (b1)
+    if (sides[0]) labelEls.push(
+      <text key="s0" x={cx} y={tY-10} textAnchor="middle" fill="#555" fontSize={13} fontWeight={700}>{sides[0]}</text>
+    );
+    // bottom base label (b2)
+    if (sides[1]) labelEls.push(
+      <text key="s1" x={cx} y={bY+18} textAnchor="middle" fill="#555" fontSize={13} fontWeight={700}>{sides[1]}</text>
+    );
+    // left leg label
+    if (sides[2]) labelEls.push(
+      <text key="s2" x={(tL+bL)/2-10} y={(tY+bY)/2+5} textAnchor="end" fill="#555" fontSize={12} fontWeight={700}>{sides[2]}</text>
+    );
+    // right leg label
+    if (sides[3]) labelEls.push(
+      <text key="s3" x={(tR+bR)/2+10} y={(tY+bY)/2+5} textAnchor="start" fill="#555" fontSize={12} fontWeight={700}>{sides[3]}</text>
+    );
+    // height: dashed vertical line with end ticks and label
+    if (height) {
+      const hx = bR + 22;
+      labelEls.push(
+        <g key="height">
+          <line x1={hx} y1={tY} x2={hx} y2={bY} stroke={color} strokeWidth={1.5} strokeDasharray="5,3"/>
+          <line x1={hx-5} y1={tY} x2={hx+5} y2={tY} stroke={color} strokeWidth={1.5}/>
+          <line x1={hx-5} y1={bY} x2={hx+5} y2={bY} stroke={color} strokeWidth={1.5}/>
+          <text x={hx+8} y={(tY+bY)/2+5} textAnchor="start" fill={color} fontSize={12} fontWeight={700}>{height}</text>
+        </g>
+      );
+    }
   }
 
   return (
@@ -1997,6 +2035,8 @@ MATH VISUALS:
 "visual": {"type":"geometry","shape":"triangle","sides":["5 cm","12 cm","13 cm"],"angles":["90°","67°","23°"],"labels":{"A":"top","B":"bottom-left","C":"bottom-right"}}
 "visual": {"type":"geometry","shape":"rectangle","sides":["8 m","3 m","8 m","3 m"]}
 "visual": {"type":"geometry","shape":"circle","sides":["6 cm"]}
+"visual": {"type":"geometry","shape":"trapezoid","sides":["8 cm","13 cm","5 cm","5 cm"],"height":"6 cm"}
+  — sides order: [top_base, bottom_base, left_leg, right_leg]; height is the perpendicular height
 
 SCIENCE VISUALS:
 "visual": {"type":"bar_chart","title":"Plant Growth","bars":[{"label":"Week 1","value":3},{"label":"Week 2","value":7}],"yLabel":"Height (cm)","highlightBar":"Week 2"}
