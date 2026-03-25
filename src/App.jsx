@@ -409,6 +409,7 @@ const SUBJECTS = [
     generalPrompt: `Generate exactly 8 math problems covering: positive & negative numbers, graphing on the coordinate plane, order of operations (PEMDAS). Mix all three topics (at least 2 of each).`,
     insightContext: "6th grade math",
     hasMathVisuals: true,
+    supportsTextTopic: true,
   },
   {
     id: "science",
@@ -2036,7 +2037,7 @@ MATH VISUALS:
 "visual": {"type":"geometry","shape":"rectangle","sides":["8 m","3 m","8 m","3 m"]}
 "visual": {"type":"geometry","shape":"circle","sides":["6 cm"]}
 "visual": {"type":"geometry","shape":"trapezoid","sides":["8 cm","13 cm","5 cm","5 cm"],"height":"6 cm"}
-  // sides order: [top_base, bottom_base, left_leg, right_leg]; height is perpendicular height
+  — sides order: [top_base, bottom_base, left_leg, right_leg]; height is the perpendicular height
 
 SCIENCE VISUALS:
 "visual": {"type":"bar_chart","title":"Plant Growth","bars":[{"label":"Week 1","value":3},{"label":"Week 2","value":7}],"yLabel":"Height (cm)","highlightBar":"Week 2"}
@@ -2140,7 +2141,9 @@ ${SCHEMA_INSTRUCTIONS}` });
       "standard 6th-grade difficulty — mix of recall and understanding",
       "challenging — application, comparison, deeper understanding",
     ][difficulty];
-    const sciVisualHint = subject?.id === "science"
+    const sciVisualHint = subject?.id === "math"
+      ? "\n\nFor MATH questions: include a 'visual' field for geometry questions (shapes, area, perimeter, angles) using the geometry_shape type, and for graphing/coordinate questions using coord_grid. Keep questions computational and precise. For non-geometry/non-graphing topics (e.g. fractions, equations, word problems) no visual field is needed. See VISUAL FIELD instructions in schema."
+      : subject?.id === "science"
       ? "\n\nFor SCIENCE questions: include a 'visual' field whenever the question involves data, diagrams, cell parts, earth layers, ecosystems, or compare/contrast. Use bar_chart for data questions, labeled_diagram for anatomy/structure questions, venn for compare/contrast, line_chart for change-over-time. See VISUAL FIELD instructions in schema."
       : subject?.id === "social_studies" || subject?.id === "history"
       ? "\n\nFor SOCIAL STUDIES questions: include a 'visual' field for timeline questions (sequence of events, dates, cause/effect). Use the timeline type with 4-5 events, highlighting the relevant one. See VISUAL FIELD instructions in schema."
@@ -2238,7 +2241,9 @@ async function generateDebrief(sessionLog, subjectName, topicName) {
    Correct: "${l.correct}"${l.tip ? `
    Built-in tip: "${l.tip}"` : ""}${l.explanation ? `
    Explanation: "${l.explanation}"` : ""}`
-  ).join("\n\n");
+  ).join("
+
+");
 
   const prompt = `A 6th grader just completed a ${subjectName} session on "${topicName}". They got ${sessionLog.filter(l=>l.ok).length}/${sessionLog.length} correct.
 
@@ -4018,8 +4023,8 @@ ${SCHEMA_INSTRUCTIONS}`;
                     <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                       <span style={{ fontSize:16 }}>✏️</span>
                       <div style={{ textAlign:"left" }}>
-                        <div style={{ fontSize:13, fontWeight:800, color:subject.accent, letterSpacing:1 }}>ENTER A THEME</div>
-                        <div style={{ fontSize:10, color:subject.accentDim, marginTop:1 }}>e.g. "Roman History" or "Clouds"</div>
+                        <div style={{ fontSize:13, fontWeight:800, color:subject.accent, letterSpacing:1 }}>+ NEW SUBJECT</div>
+                        <div style={{ fontSize:10, color:subject.accentDim, marginTop:1 }}>{subject.id === "math" ? `e.g. "Area & Perimeter" or "Two-Step Equations"` : `e.g. "Roman History" or "Clouds"`}</div>
                       </div>
                     </div>
                     <span style={{ color:"#444", fontSize:12, transform:showTextInput?"rotate(180deg)":"none", transition:"transform .2s" }}>▼</span>
@@ -4027,12 +4032,12 @@ ${SCHEMA_INSTRUCTIONS}`;
                   {showTextInput && (
                     <div style={{ background:"#F8F6F3", padding:"14px 16px", borderTop:`1px solid ${subject.border}`, animation:"fade-in .15s ease" }}>
                       <input value={textTopicInput} onChange={e=>setTextTopicInput(e.target.value)}
-                        placeholder={`e.g. "${subject.id === "religion" ? "The Seven Sacraments" : subject.id === "social_studies" ? "Ancient Rome" : "Photosynthesis"}"`}
+                        placeholder={`e.g. "${subject.id === "math" ? "two-dimensional shape area and perimeter" : subject.id === "religion" ? "The Seven Sacraments" : subject.id === "social_studies" ? "Ancient Rome" : subject.id === "grammar" ? "independent clause diagramming" : "Photosynthesis"}"`}
                         style={{ width:"100%", background:"#F8F6F3", border:`1.5px solid ${subject.border}`, borderRadius:8, padding:"10px 12px", color:"#1A1714", fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10, boxSizing:"border-box" }}
                         onKeyDown={e=>e.key==="Enter"&&handleTextTopicSubmit()} />
                       <button onClick={handleTextTopicSubmit} disabled={!textTopicInput.trim()}
                         style={{ width:"100%", padding:"10px", background:textTopicInput.trim()?subject.accent:"#F0EEE9", border:"none", borderRadius:8, color:textTopicInput.trim()?"#fff":"#9A9490", fontSize:13, fontWeight:800, cursor:textTopicInput.trim()?"pointer":"default" }}>
-                        Study This Theme →
+                        Study This Subject →
                       </button>
                     </div>
                   )}
