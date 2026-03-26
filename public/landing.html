@@ -434,8 +434,9 @@
     <div style="font-size:11px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:var(--green);margin-bottom:12px;">Free Resource</div>
     <h2 style="font-family:'Lexend',sans-serif;font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--navy);margin-bottom:12px;letter-spacing:-0.5px;">Get our free parent guide</h2>
     <p style="font-size:16px;color:var(--gray);margin-bottom:32px;line-height:1.7;">5 things parents of kids with dyslexia and learning differences can do at home — starting tonight. No signup required to read. Just your email to receive it.</p>
-    <form action="https://formspree.io/f/REPLACE_WITH_YOUR_FORMSPREE_ID" method="POST" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+    <form id="email-capture-form" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
       <input
+        id="email-capture-input"
         type="email"
         name="email"
         placeholder="Your email address"
@@ -445,13 +446,55 @@
         onblur="this.style.borderColor='var(--gray-light)'"
       />
       <button
+        id="email-capture-btn"
         type="submit"
         style="background:var(--green);color:white;border:none;padding:13px 24px;border-radius:8px;font-size:15px;font-weight:800;cursor:pointer;font-family:'Atkinson Hyperlegible',sans-serif;white-space:nowrap;"
         onmouseover="this.style.background='#22a076'"
         onmouseout="this.style.background='var(--green)'"
       >Send me the guide →</button>
     </form>
-    <p style="font-size:12px;color:#B0ACA8;margin-top:14px;">No spam. One email with the guide, that's it. Unsubscribe any time.</p>
+    <p id="email-capture-msg" style="font-size:13px;color:#B0ACA8;margin-top:14px;">No spam. One email with the guide, that's it. Unsubscribe any time.</p>
+
+    <script>
+      document.getElementById('email-capture-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const email = document.getElementById('email-capture-input').value.trim();
+        const btn = document.getElementById('email-capture-btn');
+        const msg = document.getElementById('email-capture-msg');
+
+        btn.textContent = 'Sending…';
+        btn.disabled = true;
+
+        try {
+          const res = await fetch('https://zdtwlgiuwxhnkjjvehpx.supabase.co/rest/v1/email_signups', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': 'sb_publishable_Pi7oHISoIZcl9jiLvIYlUQ_bCl7g-v3',
+              'Authorization': 'Bearer sb_publishable_Pi7oHISoIZcl9jiLvIYlUQ_bCl7g-v3',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({ email: email, source: 'landing_page' })
+          });
+
+          if (res.ok || res.status === 409) {
+            // 409 = duplicate (already signed up) — treat as success
+            document.getElementById('email-capture-form').style.display = 'none';
+            msg.textContent = "You're on the list. Check your inbox shortly.";
+            msg.style.color = 'var(--green)';
+            msg.style.fontWeight = '700';
+            msg.style.fontSize = '15px';
+          } else {
+            throw new Error('Submission failed');
+          }
+        } catch (err) {
+          msg.textContent = 'Something went wrong. Try again in a moment.';
+          msg.style.color = '#e53e3e';
+          btn.textContent = 'Send me the guide →';
+          btn.disabled = false;
+        }
+      });
+    </script>
   </div>
 </div>
 
