@@ -6,6 +6,7 @@
   <title>BrainWiz — Homework Practice App for Kids with Dyslexia &amp; Learning Differences</title>
   <meta name="description" content="BrainWiz turns your child's homework into personalized practice problems. Built for kids with dyslexia and learning differences. No subscription — start for $10."/>
   <link rel="canonical" href="https://brainwiz.io/"/>
+  <meta name="google-site-verification" content="rxgPw5yWTPNhUHDLzE2oCi_OvkNAaX2m0RXmg1omYDg" />
 
   <!-- Open Graph / Social Sharing -->
   <meta property="og:title" content="BrainWiz — Homework Practice for Kids with Dyslexia"/>
@@ -29,8 +30,8 @@
     "url": "https://brainwiz.io",
     "description": "AI-powered homework practice app for K-8 students, especially those with dyslexia and learning differences.",
     "offers": [
-      { "@type": "Offer", "price": "10.00", "priceCurrency": "USD", "name": "Starter" },
-      { "@type": "Offer", "price": "29.00", "priceCurrency": "USD", "name": "Unlimited" }
+      { "@type": "Offer", "price": "5.00", "priceCurrency": "USD", "name": "Starter" },
+      { "@type": "Offer", "price": "9.00", "priceCurrency": "USD", "name": "Unlimited" }
     ]
   }
   </script>
@@ -107,16 +108,16 @@
 
     /* ── SUBJECTS ── */
     .subjects-bg { background: white; border-top: 1px solid var(--gray-light); border-bottom: 1px solid var(--gray-light); }
-    .subjects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
+    .subjects-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
     .subj-card { border-radius: 14px; padding: 22px 18px; border: 1px solid var(--gray-light); text-align: center; }
-    .subj-emoji { font-size: 28px; margin-bottom: 8px; }
+    .subj-icon { display: flex; align-items: center; justify-content: center; height: 44px; margin: 0 auto 8px; }
     .subj-name { font-size: 14px; font-weight: 800; color: var(--navy); }
     .subj-tag { font-size: 11px; color: var(--gray); margin-top: 3px; }
 
     /* ── FEATURES ── */
     .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
     .feat-card { background: white; border: 1px solid var(--gray-light); border-radius: 16px; padding: 28px; }
-    .feat-icon { font-size: 28px; margin-bottom: 14px; }
+    .feat-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-bottom: 14px; }
     .feat-title { font-size: 16px; font-weight: 800; color: var(--navy); margin-bottom: 8px; }
     .feat-desc { font-size: 14px; color: var(--gray); line-height: 1.7; }
 
@@ -158,6 +159,7 @@
       .hero { flex-direction: column; padding: 60px 5% 48px; gap: 40px; }
       .hero-visual { flex: none; width: 100%; max-width: 360px; }
       .nav-links { display: none; }
+      .subjects-grid { grid-template-columns: repeat(2, 1fr) !important; }
     }
   </style>
 </head>
@@ -194,7 +196,7 @@
 <section>
   <div class="hero">
     <div class="hero-text">
-      <div class="hero-eyebrow">✦ Personalized · Practice-Based Learning</div>
+      <div class="hero-eyebrow">Personalized · Practice-Based Learning</div>
       <h1 class="hero-h1">Smarter Practice.<br/><span>Stronger Thinkers.</span></h1>
       <p class="hero-sub">Designed for kids with dyslexia and learning differences — upload homework and BrainWiz turns it into personalized, adaptive practice that builds real mastery and real confidence.</p>
       <div class="hero-actions">
@@ -219,13 +221,13 @@
           <div class="hero-brand">Brain<span>Wiz</span></div>
         </div>
         <div class="subject-chips">
-          <span class="chip">📐 Math</span>
-          <span class="chip green">🔬 Science</span>
-          <span class="chip purple">📖 English</span>
-          <span class="chip amber">✝️ Religion</span>
-          <span class="chip">🌍 History</span>
-          <span class="chip purple">🏛️ Latin</span>
-          <span class="chip">✏️ Grammar</span>
+          <span class="chip">Math</span>
+          <span class="chip green">Science</span>
+          <span class="chip purple">English</span>
+          <span class="chip amber">Religion</span>
+          <span class="chip">History</span>
+          <span class="chip purple">Latin</span>
+          <span class="chip">Grammar</span>
         </div>
       </div>
     </div>
@@ -245,28 +247,28 @@
     <p style="font-size:18px;color:#93B5D4;margin-bottom:48px;font-weight:600;">Middle school is where confidence is built — or broken.</p>
 
     <!-- 4 problem cards -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:48px;">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:48px;">
 
       <div class="prob-card" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:24px 20px;transition:transform .2s,background .2s;">
-        <div style="font-size:32px;margin-bottom:14px;">😤</div>
+        <div style="margin-bottom:14px;"><svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 4L11 17H17L13 28L21 15H15Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="rgba(255,255,255,0.12)"/></svg></div>
         <div style="font-size:15px;font-weight:800;color:white;margin-bottom:6px;line-height:1.3;">Kids rush and make avoidable mistakes</div>
         <div style="width:32px;height:3px;background:var(--green);border-radius:2px;margin-top:10px;"></div>
       </div>
 
       <div class="prob-card" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:24px 20px;transition:transform .2s,background .2s;">
-        <div style="font-size:32px;margin-bottom:14px;">🤷</div>
+        <div style="margin-bottom:14px;"><svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="9" r="5" stroke="white" stroke-width="2"/><path d="M4 27C4 22.029 8.029 18 13 18" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M22 13C22 11.895 22.895 11 24 11C25.105 11 26 11.895 26 13C26 14.2 24.8 15 24 16L24 17.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="21" r="1.5" fill="white"/></svg></div>
         <div style="font-size:15px;font-weight:800;color:white;margin-bottom:6px;line-height:1.3;">Parents feel unprepared to help</div>
         <div style="width:32px;height:3px;background:var(--green);border-radius:2px;margin-top:10px;"></div>
       </div>
 
       <div class="prob-card" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:24px 20px;transition:transform .2s,background .2s;">
-        <div style="font-size:32px;margin-bottom:14px;">🔄</div>
+        <div style="margin-bottom:14px;"><svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 16A9 9 0 0 1 23.5 9.5" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M25 16A9 9 0 0 1 8.5 22.5" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M21 6L24.5 10H19.5Z" fill="white"/><path d="M11 26L7.5 22H12.5Z" fill="white"/></svg></div>
         <div style="font-size:15px;font-weight:800;color:white;margin-bottom:6px;line-height:1.3;">Practice feels repetitive and random</div>
         <div style="width:32px;height:3px;background:var(--green);border-radius:2px;margin-top:10px;"></div>
       </div>
 
       <div class="prob-card" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:24px 20px;transition:transform .2s,background .2s;">
-        <div style="font-size:32px;margin-bottom:14px;">😰</div>
+        <div style="margin-bottom:14px;"><svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 5L28 27H4Z" stroke="white" stroke-width="2" stroke-linejoin="round" fill="rgba(255,255,255,0.08)"/><line x1="16" y1="13" x2="16" y2="20" stroke="white" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="23.5" r="1.5" fill="white"/></svg></div>
         <div style="font-size:15px;font-weight:800;color:white;margin-bottom:6px;line-height:1.3;">Tests expose gaps no one saw coming</div>
         <div style="width:32px;height:3px;background:var(--green);border-radius:2px;margin-top:10px;"></div>
       </div>
@@ -275,7 +277,7 @@
 
     <!-- resolution callout -->
     <div style="display:flex;align-items:center;gap:20px;background:var(--green);border-radius:14px;padding:24px 28px;">
-      <div style="font-size:36px;flex-shrink:0;">✦</div>
+      <div style="flex-shrink:0;"><svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M18 4L20 16L32 18L20 20L18 32L16 20L4 18L16 16Z" fill="white" opacity="0.9"/></svg></div>
       <div>
         <div style="font-family:'Lexend',sans-serif;font-size:20px;font-weight:800;color:white;margin-bottom:4px;">BrainWiz changes that.</div>
         <div style="font-size:15px;color:rgba(255,255,255,0.82);line-height:1.6;">Personalized practice built from your child's actual homework — targeted, adaptive, and confidence-building.</div>
@@ -365,14 +367,14 @@
     <h2 class="section-h2">Every class, covered</h2>
     <p class="section-sub">BrainWiz works across the full curriculum — not just math.</p>
     <div class="subjects-grid">
-      <div class="subj-card" style="background:#EEF3FA;border-color:#C8D8E8"><div class="subj-emoji">📐</div><div class="subj-name">Math</div><div class="subj-tag">Numbers · Fractions · Graphs</div></div>
-      <div class="subj-card" style="background:#F0FDF4;border-color:#BBF7D0"><div class="subj-emoji">🔬</div><div class="subj-name">Science</div><div class="subj-tag">Biology · Earth · Physics</div></div>
-      <div class="subj-card" style="background:#FFF7ED;border-color:#FED7AA"><div class="subj-emoji">🌍</div><div class="subj-name">Social Studies</div><div class="subj-tag">History · Geography · Civics</div></div>
-      <div class="subj-card" style="background:#EFF6FF;border-color:#BFDBFE"><div class="subj-emoji">✏️</div><div class="subj-name">Grammar</div><div class="subj-tag">Parts of Speech · Writing</div></div>
-      <div class="subj-card" style="background:#FDF2F8;border-color:#FBCFE8"><div class="subj-emoji">🏛️</div><div class="subj-name">Latin</div><div class="subj-tag">Vocab · Grammar · Translation</div></div>
-      <div class="subj-card" style="background:#F5F3FF;border-color:#DDD6FE"><div class="subj-emoji">📖</div><div class="subj-name">English</div><div class="subj-tag">Literature · Comprehension</div></div>
-      <div class="subj-card" style="background:#FFFBEB;border-color:#FDE68A"><div class="subj-emoji">✝️</div><div class="subj-name">Religion</div><div class="subj-tag">Catechism · Sacraments</div></div>
-      <div class="subj-card" style="background:#F8F6F3;border-color:#E2DDD8;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px"><div class="subj-emoji">✨</div><div class="subj-name" style="color:#9A9490">And More</div><div class="subj-tag">New subjects added regularly</div></div>
+      <div class="subj-card" style="background:#EEF3FA;border-color:#C8D8E8"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M16 4L4 27H28Z" stroke="#1E3A5F" stroke-width="2" stroke-linejoin="round"/><line x1="10" y1="20" x2="23" y2="20" stroke="#1E3A5F" stroke-width="1.5"/></svg></div><div class="subj-name">Math</div><div class="subj-tag">Numbers · Fractions · Graphs</div></div>
+      <div class="subj-card" style="background:#F0FDF4;border-color:#BBF7D0"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M12 4V14L5 25C4.5 26 5.3 27 6.5 27H25.5C26.7 27 27.5 26 27 25L20 14V4" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="10" y1="4" x2="22" y2="4" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><circle cx="11" cy="22" r="2" fill="#2BC48A"/><circle cx="18" cy="24" r="1.5" fill="#2BC48A"/></svg></div><div class="subj-name">Science</div><div class="subj-tag">Biology · Earth · Physics</div></div>
+      <div class="subj-card" style="background:#FFF7ED;border-color:#FED7AA"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="11" stroke="#1E3A5F" stroke-width="2"/><ellipse cx="16" cy="16" rx="5.5" ry="11" stroke="#1E3A5F" stroke-width="1.5"/><line x1="5" y1="16" x2="27" y2="16" stroke="#1E3A5F" stroke-width="1.5"/><path d="M7 10Q16 12 25 10" stroke="#1E3A5F" stroke-width="1.5" fill="none"/><path d="M7 22Q16 20 25 22" stroke="#1E3A5F" stroke-width="1.5" fill="none"/></svg></div><div class="subj-name">Social Studies</div><div class="subj-tag">History · Geography · Civics</div></div>
+      <div class="subj-card" style="background:#EFF6FF;border-color:#BFDBFE"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M8 24L8 19L21 6L26 11L13 24Z" stroke="#1E3A5F" stroke-width="2" stroke-linejoin="round"/><line x1="18" y1="9" x2="23" y2="14" stroke="#1E3A5F" stroke-width="1.5"/><path d="M8 24L5 27" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/></svg></div><div class="subj-name">Grammar</div><div class="subj-tag">Parts of Speech · Writing</div></div>
+      <div class="subj-card" style="background:#FDF2F8;border-color:#FBCFE8"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><rect x="11" y="9" width="10" height="16" stroke="#1E3A5F" stroke-width="2"/><line x1="7" y1="9" x2="25" y2="9" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="25" x2="25" y2="25" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="27" x2="27" y2="27" stroke="#1E3A5F" stroke-width="2.5" stroke-linecap="round"/><line x1="7" y1="7" x2="25" y2="7" stroke="#1E3A5F" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="subj-name">Latin</div><div class="subj-tag">Vocab · Grammar · Translation</div></div>
+      <div class="subj-card" style="background:#F5F3FF;border-color:#DDD6FE"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><path d="M16 8C12 6 6 7 4 9V25C6 23 12 22 16 24C20 22 26 23 28 25V9C26 7 20 6 16 8Z" stroke="#1E3A5F" stroke-width="2" stroke-linejoin="round"/><line x1="16" y1="8" x2="16" y2="24" stroke="#1E3A5F" stroke-width="1.5"/></svg></div><div class="subj-name">English</div><div class="subj-tag">Literature · Comprehension</div></div>
+      <div class="subj-card" style="background:#FFFBEB;border-color:#FDE68A"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><line x1="16" y1="5" x2="16" y2="27" stroke="#1E3A5F" stroke-width="2.5" stroke-linecap="round"/><line x1="9" y1="12" x2="23" y2="12" stroke="#1E3A5F" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="subj-name">Religion</div><div class="subj-tag">Catechism · Sacraments</div></div>
+      <div class="subj-card" style="background:#F8F6F3;border-color:#E2DDD8;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px"><div class="subj-icon"><svg width="36" height="36" viewBox="0 0 32 32" fill="none"><line x1="16" y1="4" x2="16" y2="28" stroke="#9A9490" stroke-width="2" stroke-linecap="round"/><line x1="4" y1="16" x2="28" y2="16" stroke="#9A9490" stroke-width="2" stroke-linecap="round"/><line x1="7.5" y1="7.5" x2="24.5" y2="24.5" stroke="#9A9490" stroke-width="1.5" stroke-linecap="round"/><line x1="24.5" y1="7.5" x2="7.5" y2="24.5" stroke="#9A9490" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="subj-name" style="color:#9A9490">And More</div><div class="subj-tag">New subjects added regularly</div></div>
     </div>
   </div>
 </div>
@@ -384,12 +386,12 @@
     <h2 class="section-h2">Built for real students</h2>
     <p class="section-sub">Designed with a clean interface, visual aids, and a distraction-free experience students actually enjoy.</p>
     <div class="features">
-      <div class="feat-card"><div class="feat-icon">📸</div><div class="feat-title">Homework Upload</div><div class="feat-desc">Photograph any homework page — JPG, PNG, PDF, or HEIC from iPhone. BrainWiz reads it and generates matching questions.</div></div>
-      <div class="feat-card"><div class="feat-icon">🎯</div><div class="feat-title">Adaptive Difficulty</div><div class="feat-desc">Three levels — Starter, Building, Challenging — calibrated to the actual homework, not just grade level.</div></div>
-      <div class="feat-card"><div class="feat-icon">🔀</div><div class="feat-title">Mix Mode</div><div class="feat-desc">Blend multiple saved topics into one session to practice connections across units and chapters.</div></div>
-      <div class="feat-card"><div class="feat-icon">🔍</div><div class="feat-title">Weak Spots Review</div><div class="feat-desc">The app tracks every missed question and builds a targeted review session automatically.</div></div>
-      <div class="feat-card"><div class="feat-icon">🧠</div><div class="feat-title">Designed for Focus</div><div class="feat-desc">Clean interface, dyslexia-friendly fonts, color-coded answers, and visual number lines for math — built for kids with dyslexia and ADHD who need less noise, not more.</div></div>
-      <div class="feat-card"><div class="feat-icon">👨‍👩‍👧</div><div class="feat-title">Multi-Student</div><div class="feat-desc">Each student has their own account with separate progress, topics, and history. Parents stay in control.</div></div>
+      <div class="feat-card"><div class="feat-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 21V26H26V21" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="16" y1="6" x2="16" y2="22" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><path d="M10 12L16 6L22 12" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="feat-title">Homework Upload</div><div class="feat-desc">Photograph any homework page — JPG, PNG, PDF, or HEIC from iPhone. BrainWiz reads it and generates matching questions.</div></div>
+      <div class="feat-card"><div class="feat-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="11" stroke="#1E3A5F" stroke-width="2"/><circle cx="16" cy="16" r="7" stroke="#1E3A5F" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="#2BC48A"/></svg></div><div class="feat-title">Adaptive Difficulty</div><div class="feat-desc">Three levels — Starter, Building, Challenging — calibrated to the actual homework, not just grade level.</div></div>
+      <div class="feat-card"><div class="feat-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M4 10H10L18 22H24" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><path d="M4 22H10L18 10H24" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><path d="M21 7L25 10L21 13" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 19L25 22L21 25" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="feat-title">Mix Mode</div><div class="feat-desc">Blend multiple saved topics into one session to practice connections across units and chapters.</div></div>
+      <div class="feat-card"><div class="feat-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="14" cy="14" r="8" stroke="#1E3A5F" stroke-width="2"/><line x1="20" y1="20" x2="27" y2="27" stroke="#1E3A5F" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="feat-title">Weak Spots Review</div><div class="feat-desc">The app tracks every missed question and builds a targeted review session automatically.</div></div>
+      <div class="feat-card"><div class="feat-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M4 16Q16 6 28 16Q16 26 4 16Z" stroke="#1E3A5F" stroke-width="2" stroke-linejoin="round"/><circle cx="16" cy="16" r="4" stroke="#1E3A5F" stroke-width="2"/><circle cx="16" cy="16" r="2" fill="#1E3A5F"/></svg></div><div class="feat-title">Designed for Focus</div><div class="feat-desc">Clean interface, dyslexia-friendly fonts, color-coded answers, and visual number lines for math — built for kids with dyslexia and ADHD who need less noise, not more.</div></div>
+      <div class="feat-card"><div class="feat-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="11" cy="10" r="4" stroke="#1E3A5F" stroke-width="2"/><path d="M3 27C3 22.029 6.582 18 11 18C15.418 18 19 22.029 19 27" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="10" r="4" stroke="#1E3A5F" stroke-width="2"/><path d="M21 18C24 18 29 21 29 27" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round"/></svg></div><div class="feat-title">Multi-Student</div><div class="feat-desc">Each student has their own account with separate progress, topics, and history. Parents stay in control.</div></div>
     </div>
   </div>
 </div>
@@ -403,7 +405,7 @@
     <div class="pricing-grid">
       <div class="price-card">
         <div class="price-name">Starter</div>
-        <div class="price-tag">$10</div>
+        <div class="price-tag">$5</div>
         <div class="price-period">one-time · no expiry</div>
         <div class="price-desc" style="margin-top:12px">Perfect for trying BrainWiz with your child before committing to a plan.</div>
         <ul class="price-features">
@@ -416,7 +418,7 @@
       </div>
       <div class="price-card featured">
         <div class="price-name">Unlimited</div>
-        <div class="price-tag" style="color:var(--green)">$29</div>
+        <div class="price-tag" style="color:var(--green)">$9</div>
         <div class="price-period" style="color:#93B5D4">per month · cancel anytime</div>
         <div class="price-desc" style="margin-top:12px">Full access with everything BrainWiz has to offer — no limits, no caps.</div>
         <ul class="price-features">
