@@ -2058,14 +2058,18 @@ RULES: Only include a "visual" field when it genuinely aids comprehension. Omit 
 Each question is independent — only include "visual" if THAT specific question benefits from it.`
 
 // Quick topic detection — lightweight call, returns {topicKey, topicName, description}
-async function detectHomeworkTopic(base64, mediaType) {
-  const imageBlock = mediaType === "application/pdf"
-    ? { type:"document", source:{ type:"base64", media_type:"application/pdf", data:base64 } }
-    : { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } };
+// files: [{base64, mediaType}] — supports multiple pages
+async function detectHomeworkTopic(files) {
+  const imageBlocks = files.map(({ base64, mediaType }) =>
+    mediaType === "application/pdf"
+      ? { type:"document", source:{ type:"base64", media_type:"application/pdf", data:base64 } }
+      : { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } }
+  );
+  const pageWord = files.length > 1 ? `these ${files.length} homework pages` : "this homework page";
 
   const res = await callAPI([{ role:"user", content:[
-    imageBlock,
-    { type:"text", text:`Look at this homework page. In one JSON object, identify what it's about.
+    ...imageBlocks,
+    { type:"text", text:`Look at ${pageWord}. In one JSON object, identify the overall topic they cover.
 Return ONLY a JSON object — no markdown, no explanation.
 Format: {"topicKey":"equivalent_fractions","topicName":"Equivalent Fractions","description":"Finding and writing equivalent fractions, and simplifying fractions to lowest terms."}
 topicKey: short snake_case identifier. topicName: 2-4 word friendly name. description: one plain sentence for a 6th grader.` }
@@ -2080,11 +2084,13 @@ topicKey: short snake_case identifier. topicName: 2-4 word friendly name. descri
   return JSON.parse(match[0]);
 }
 
-async function generateProblems(base64, mediaType, difficulty, hwTopic, subject, questionCount = 8) {
+// hwFiles: [{base64, mediaType}] — may contain multiple pages; null/[] for non-upload modes
+async function generateProblems(hwFiles, difficulty, hwTopic, subject, questionCount = 8) {
   const blocks = [];
   const qCount = questionCount;
+  const hasImages = Array.isArray(hwFiles) && hwFiles.length > 0;
 
-  if (base64 && mediaType) {
+  if (hasImages) {
     // ── HOMEWORK MODE: difficulty is relative to the homework baseline ────
     const diffDesc = [
       "15–20% EASIER than the homework shown — use simpler numbers, fewer steps, same concept. Do NOT go off-topic.",
@@ -2092,14 +2098,18 @@ async function generateProblems(base64, mediaType, difficulty, hwTopic, subject,
       "30–50% HARDER than the homework shown — more steps, harder numbers, mixed sub-types of the same concept.",
     ][difficulty];
 
-    blocks.push(
-      mediaType === "application/pdf"
-        ? { type:"document", source:{ type:"base64", media_type:"application/pdf", data:base64 } }
-        : { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } }
-    );
+    // Send all pages as image blocks before the instruction text
+    for (const { base64, mediaType } of hwFiles) {
+      blocks.push(
+        mediaType === "application/pdf"
+          ? { type:"document", source:{ type:"base64", media_type:"application/pdf", data:base64 } }
+          : { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } }
+      );
+    }
+    const pageNote = hwFiles.length > 1 ? ` (${hwFiles.length} pages shown above)` : "";
     blocks.push({ type:"text", text:`You are a math tutor for a 6th grader with dyslexia.
 
-The homework page covers: ${hwTopic ? `"${hwTopic.topicName}" — ${hwTopic.description}` : "the topic shown in the image"}.
+The homework${pageNote} covers: ${hwTopic ? `"${hwTopic.topicName}" — ${hwTopic.description}` : "the topic shown in the image"}.
 
 Generate exactly 8 practice problems on THIS TOPIC ONLY — not on other topics.
 Difficulty level: ${diffDesc}
@@ -2158,7 +2168,7 @@ Dyslexia rules: SHORT clear question text, no clutter, unambiguous wording. Mult
 Use topic string: "${hwTopic.topicKey}"
 Mix different aspects and sub-topics within "${hwTopic.topicName}" where appropriate.${sciVisualHint}
 ${SCHEMA_INSTRUCTIONS}` });
-  } else if (hwTopic && !base64) {
+  } else if (hwTopic && !hasImages) {
     // ── TOPIC BANK MODE: no image, use stored topic name/description ──────
     const diffDesc = [
       "15–20% EASIER than typical homework — simpler numbers, fewer steps, same concept.",
@@ -2487,6 +2497,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef();
+  const addPageRef = useRef(); // for adding more pages on confirm screen
+  const hwFilesRef = useRef([]); // always-current mirror of hwFiles, avoids stale-closure bugs
 
   const [timerIdx, setTimerIdx] = useState(3);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -2503,7 +2515,7 @@ export default function App() {
   const [insightsError, setInsightsError] = useState(null);
 
   // Homework confirmation flow
-  const [hwFile, setHwFile] = useState(null);      // {base64, mediaType}
+  const [hwFiles, setHwFiles] = useState([]);       // [{base64, mediaType}, ...] — multi-page support
   const [hwTopic, setHwTopic] = useState(null);    // {topicKey, topicName, description}
   const [hwDetecting, setHwDetecting] = useState(false);
   const [textTopicInput, setTextTopicInput] = useState("");   // theme text input
@@ -2578,6 +2590,7 @@ export default function App() {
   const clearTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
   useEffect(() => () => clearTimer(), []);
   useEffect(() => { prefetchedRef.current = prefetchedProblems; }, [prefetchedProblems]);
+  useEffect(() => { hwFilesRef.current = hwFiles; }, [hwFiles]);
 
 
   // Load subject-specific data when subject changes OR when returning to upload screen
@@ -2625,11 +2638,12 @@ export default function App() {
     }, 1000);
   };
 
-  const startSession = useCallback(async (base64, mediaType, topic) => {
+  // hwFilesArg: [{base64, mediaType}] or null/[] for non-upload modes
+  const startSession = useCallback(async (hwFilesArg, topic) => {
     setError(null); setScreen("loading");
     setPrefetchedProblems([]); prefetchedRef.current = [];
     try {
-      const probs = await generateProblems(base64, mediaType, difficulty, topic, subject, TIMER_OPTIONS[timerIdx].questionCount);
+      const probs = await generateProblems(hwFilesArg, difficulty, topic, subject, TIMER_OPTIONS[timerIdx].questionCount);
       if (!Array.isArray(probs)||!probs.length) throw new Error("Got empty problem list");
       setProblems(probs); setIdx(0); setScore(0); setStreak(0); setWrongStreak(0);
       setLog([]); setSelected(null); setSubmitted(false);
@@ -2638,12 +2652,10 @@ export default function App() {
       startTimer(TIMER_OPTIONS[timerIdx].seconds);
       setScreen("problem");
     } catch(err) { setError(err.message||"Unknown error"); setScreen("upload"); }
-  }, [difficulty, timerIdx]);
+  }, [difficulty, timerIdx, subject]);
 
-  const handleFile = useCallback(async (file) => {
-    if (!file) return;
-    setError(null);
-
+  // ── processOneFile: HEIC-convert + compress a single File → {base64, mediaType, previewUrl}
+  const processOneFile = useCallback(async (file) => {
     const name = (file.name || "").toLowerCase();
     const mime = (file.type || "").toLowerCase();
     const isHeic = mime.includes("heic") || mime.includes("heif") ||
@@ -2652,10 +2664,8 @@ export default function App() {
     let finalFile = file;
 
     if (isHeic) {
-      // Show a brief converting message, then silently convert to JPEG
       setError("HEIC_CONVERTING");
       try {
-        // Dynamically load heic2any from CDN
         if (!window._heic2any) {
           await new Promise((resolve, reject) => {
             const s = document.createElement("script");
@@ -2669,57 +2679,91 @@ export default function App() {
         const blob = await window._heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
         finalFile = new File([blob], name.replace(/\.heic?$/, ".jpg"), { type: "image/jpeg" });
         setError(null);
-      } catch (err) {
-        setError("HEIC_FAILED");
-        return;
+      } catch {
+        // Any HEIC failure (library load error, corrupt file, etc.) → show HEIC help UI
+        throw new Error("HEIC_FAILED");
       }
     } else if (mime && !mime.startsWith("image/") && mime !== "application/pdf") {
-      setError(`Unsupported file type (${file.type || "unknown"}). Please use JPG, PNG, or PDF.`);
-      return;
+      throw new Error(`Unsupported file type (${file.type || "unknown"}). Please use JPG, PNG, or PDF.`);
     }
 
+    // Read → compress
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result);
+      r.onerror = rej;
+      r.readAsDataURL(finalFile);
+    });
+
+    let base64 = dataUrl.split(",")[1];
+    let mediaType = finalFile.type || "image/jpeg";
+    let previewUrl = dataUrl; // original data URL for thumbnail
+
+    // ── Compress image to stay under Vercel's 4.5MB limit ──────────────
+    try {
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      const scale = Math.min(MAX/w, MAX/h, 1);
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL("image/jpeg", 0.70);
+      base64 = compressed.split(",")[1];
+      mediaType = "image/jpeg";
+      previewUrl = compressed;
+      console.log("Compressed to " + w + "x" + h + ", ~" + Math.round(base64.length/1024) + "KB base64");
+    } catch (compressErr) {
+      console.warn("Compression skipped:", compressErr);
+    }
+
+    return { base64, mediaType, previewUrl };
+  }, []);
+
+  // ── handleFiles: process one or more files, then go to confirm screen ─
+  const handleFiles = useCallback(async (files, appendToExisting = false) => {
+    if (!files || !files.length) return;
     setError(null);
-    // Read file, then detect topic and show confirm screen
-    const r = new FileReader();
-    r.onload = async (e) => {
-      let base64 = e.target.result.split(",")[1];
-      let mediaType = finalFile.type || "image/jpeg";
 
-      // ── Compress image aggressively to stay under Vercel's 4.5MB limit ─
+    const processed = [];
+    for (const file of files) {
       try {
-        const img = new Image();
-        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = e.target.result; });
-        const MAX = 800;
-        let w = img.width, h = img.height;
-        const scale = Math.min(MAX/w, MAX/h, 1);
-        w = Math.round(w * scale); h = Math.round(h * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        const compressed = canvas.toDataURL("image/jpeg", 0.70);
-        base64 = compressed.split(",")[1];
-        mediaType = "image/jpeg";
-        console.log("Compressed to " + w + "x" + h + ", ~" + Math.round(base64.length/1024) + "KB base64");
-      } catch (compressErr) {
-        console.warn("Compression skipped:", compressErr);
+        const result = await processOneFile(file);
+        processed.push(result);
+      } catch (err) {
+        if (err.message === "HEIC_FAILED") {
+          setError("HEIC_FAILED");
+        } else {
+          setError(err.message || "Could not read file.");
+        }
+        return;
       }
+    }
 
-      setHwFile({ base64, mediaType });
-      setHwDetecting(true);
-      setScreen("confirm");
-      try {
-        const topic = await detectHomeworkTopic(base64, mediaType);
-        setHwTopic(topic);
-        // Default to Building (1) as baseline for homework
-        setDifficulty(1);
-      } catch {
-        setHwTopic({ topicKey: "unknown", topicName: "Homework", description: "Problems based on your uploaded page." });
-      } finally {
-        setHwDetecting(false);
-      }
-    };
-    r.readAsDataURL(finalFile);
-  }, [startSession]);
+    // Use hwFilesRef.current (not closure hwFiles) so concurrent "add page" clicks
+    // always read the freshest value rather than a potentially stale snapshot.
+    const newFiles = appendToExisting
+      ? [...hwFilesRef.current, ...processed]
+      : processed;
+
+    // Safety guard: nothing was successfully processed (shouldn't happen, but be safe)
+    if (newFiles.length === 0) return;
+
+    setHwFiles(newFiles);
+    setHwDetecting(true);
+    setScreen("confirm");
+    try {
+      const topic = await detectHomeworkTopic(newFiles);
+      setHwTopic(topic);
+      setDifficulty(1);
+    } catch {
+      setHwTopic({ topicKey: "unknown", topicName: "Homework", description: "Problems based on your uploaded pages." });
+    } finally {
+      setHwDetecting(false);
+    }
+  }, [processOneFile]); // hwFilesRef (not hwFiles state) used for append — no stale-closure risk
 
   const handleSubmit = () => {
     if (!selected) return;
@@ -2771,7 +2815,7 @@ export default function App() {
     const remaining = problems.length - 1 - idx;
     if (remaining <= 2 && !isPrefetching && prefetchedRef.current.length === 0) {
       setIsPrefetching(true);
-      generateProblems(null, null, difficulty, hwTopic, subject, timerOpt.questionCount)
+      generateProblems(null, difficulty, hwTopic, subject, timerOpt.questionCount)
         .then(newProbs => {
           if (Array.isArray(newProbs) && newProbs.length > 0) {
             setPrefetchedProblems(newProbs); prefetchedRef.current = newProbs;
@@ -2792,7 +2836,7 @@ export default function App() {
         .catch(() => {})
         .finally(() => setIsPrefetching(false));
     }
-  }, [idx, problems.length, timerIdx, timeLeft, isPrefetching]);
+  }, [idx, problems.length, timerIdx, timeLeft, isPrefetching, difficulty, hwTopic, subject]);
 
   const sessionSavedRef = useRef(false);
   useEffect(() => {
@@ -2871,7 +2915,7 @@ export default function App() {
       dueCards: due,
     };
     setHwTopic(srsTopic);
-    setHwFile(null);
+    setHwFiles([]);
     setDifficulty(1);
     setScreen("confirm");
   };
@@ -2883,7 +2927,7 @@ export default function App() {
     const pick = shuffled.slice(0, Math.min(3, topicBank.length));
     const mixTopic = { topicKey: "mix", topicName: "Mixed Topics", description: pick.map(t => t.topicName).join(", "), _isMix: true, mixTopics: pick };
     setHwTopic(mixTopic);
-    setHwFile(null);
+    setHwFiles([]);
     setDifficulty(1);
     setScreen("confirm");
   };
@@ -2975,7 +3019,7 @@ export default function App() {
         bookAuthor: author,
         bookChapter: chapter,
       };
-      setHwTopic(topic); setHwFile(null); setDifficulty(1);
+      setHwTopic(topic); setHwFiles([]); setDifficulty(1);
       setShowTextInput(false); setBookTitle(""); setBookChapter(""); setBookAuthor("");
       setScreen("confirm");
     } else if (subject?.supportsTextTopic) {
@@ -2987,7 +3031,7 @@ export default function App() {
         description: `${subject.name} study: ${topicName}`,
         _isTextTopic: true,
       };
-      setHwTopic(topic); setHwFile(null); setDifficulty(1);
+      setHwTopic(topic); setHwFiles([]); setDifficulty(1);
       setShowTextInput(false); setTextTopicInput("");
       setScreen("confirm");
     }
@@ -3303,7 +3347,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                         _fromCurriculum: true,
                       });
                       setDifficulty(nextSession.difficulty ?? 1);
-                      setHwFile(null);
+                      setHwFiles([]);
                       setScreen("confirm");
                     }} style={{ marginTop:8, width:"100%", padding:"8px", background:accent, border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer" }}>
                       ▶ Start Session {nextSession.sessionNumber}: {nextSession.title}
@@ -3332,7 +3376,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                     setSubject(sub);
                     setTopicBank([]);
                     setError(null);
-                    setHwFile(null);
+                    setHwFiles([]);
                     setHwTopic(null);
                     setShowTextInput(false);
                     setTextTopicInput("");
@@ -3854,7 +3898,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
 
                 {/* General */}
-                <button onClick={() => { setHwTopic({ _isGeneral:true, topicName:"General Practice", description:subject?.generalLabel||"Mixed topics" }); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
+                <button onClick={() => { setHwTopic({ _isGeneral:true, topicName:"General Practice", description:subject?.generalLabel||"Mixed topics" }); setHwFiles([]); setDifficulty(1); setScreen("confirm"); }}
                   style={{ background:"#FFFFFF", border:`1.5px solid ${subject?.border||"#E2DDD8"}`, borderRadius:10, padding:"14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=subject?.accent+"66"||"#1E3A5F66";e.currentTarget.style.background=subject?.bg||"#F8F6F3";}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=subject?.border||"#2a2a2a";e.currentTarget.style.background="#FFFFFF";}}>
@@ -3891,7 +3935,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                       const color = subject?.accent || "#1E3A5F";
                       return (
                         <button key={"curr_"+t.topicKey}
-                          onClick={() => { setHwTopic({ ...t, _fromCurriculum: true }); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
+                          onClick={() => { setHwTopic({ ...t, _fromCurriculum: true }); setHwFiles([]); setDifficulty(1); setScreen("confirm"); }}
                           style={{ background:"#FAFAF8", border:`1.5px solid ${color}33`, borderRadius:10, padding:"12px 14px", cursor:"pointer", textAlign:"left", transition:"border-color .2s, box-shadow .2s", position:"relative", boxShadow:"none" }}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor=color+"77";e.currentTarget.style.boxShadow=`0 2px 10px ${color}18`;}}
                           onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"33";e.currentTarget.style.boxShadow="none";}}>
@@ -3936,7 +3980,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                   const color = topicColor(t.topicKey);
                   return (
                     <button key={t.topicKey}
-                      onClick={() => { setHwTopic(t); setHwFile(null); setDifficulty(1); setScreen("confirm"); }}
+                      onClick={() => { setHwTopic(t); setHwFiles([]); setDifficulty(1); setScreen("confirm"); }}
                       style={{ background:"#FFFFFF", border:`1.5px solid ${color}22`, borderRadius:10, padding:"12px 14px", cursor:"pointer", textAlign:"left", transition:"border-color .15s, background .15s" }}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=color+"77";e.currentTarget.style.background=color+"08";}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=color+"22";e.currentTarget.style.background="#FFFFFF";}}>
@@ -3960,7 +4004,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                 onClick={() => fileRef.current.click()}
                 onDragOver={(e)=>{e.preventDefault();setDragging(true);}}
                 onDragLeave={()=>setDragging(false)}
-                onDrop={(e)=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
+                onDrop={(e)=>{e.preventDefault();setDragging(false);const files=Array.from(e.dataTransfer.files);if(files.length)handleFiles(files);}}
                 style={{ width:"100%", marginBottom:8, background:dragging?"#EEF3FA":"transparent", border:`2px dashed ${dragging?"#1E3A5F":"#D0CCC8"}`, borderRadius:12, padding:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:14, transition:"all .15s" }}>
                 <div style={{ fontSize:24, color:dragging?"#1E3A5F":"#D0CCC8", lineHeight:1 }}>+</div>
                 <div style={{ textAlign:"left" }}>
@@ -4044,8 +4088,8 @@ ${SCHEMA_INSTRUCTIONS}`;
 
             </div>
 
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display:"none" }}
-              onChange={(e)=>{if(e.target.files[0])handleFile(e.target.files[0]);}} />
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display:"none" }} multiple
+              onChange={(e)=>{const files=Array.from(e.target.files);if(files.length)handleFiles(files);e.target.value="";}} />
 
             <div style={{ borderTop:"1px solid #E2DDD8", paddingTop:14, display:"flex", flexDirection:"column", gap:8 }}>
               {(() => { const dueCount = getDueCount(srsCards, subject?.id||"math"); return dueCount > 0 ? (
@@ -4114,6 +4158,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                   const modeLabel = isGeneral ? "General Practice" : isMix ? "Mixed Topics" : isBook ? "Book Study" : isTextTopic ? "Custom Topic" : "Topic Detected";
                   const modeTitle = isGeneral ? (subject?.name || "General") : isMix ? "🔀 Mix" : hwTopic?.topicName || "Homework";
                   const modeDesc = isGeneral ? subject?.generalLabel : isMix ? hwTopic.mixTopics?.map(t=>t.topicName).join(", ") : isBook ? (hwTopic.bookAuthor ? `by ${hwTopic.bookAuthor}` : "Literature study") : hwTopic?.description;
+                  const isUpload = !isGeneral && !isMix && !isBook && !isTextTopic && hwFiles.length > 0;
                   return (
                     <div style={{ background:bg, border:`1.5px solid ${border}`, borderRadius:12, padding:"20px 22px", marginBottom:24 }}>
                       <div style={{ fontSize:11, color:accentDim, letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:800 }}>
@@ -4125,6 +4170,40 @@ ${SCHEMA_INSTRUCTIONS}`;
                       <div style={{ fontSize:13, color:accentDim, lineHeight:1.6 }}>
                         {modeDesc}
                       </div>
+                      {/* ── Multi-page thumbnails ── */}
+                      {isUpload && (
+                        <div style={{ marginTop:14 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                            {hwFiles.map((f, i) => (
+                              <div key={i} style={{ position:"relative" }}>
+                                <img
+                                  src={f.previewUrl || `data:${f.mediaType};base64,${f.base64}`}
+                                  alt={`Page ${i+1}`}
+                                  style={{ width:54, height:72, objectFit:"cover", borderRadius:6, border:`1.5px solid ${border}`, display:"block" }}
+                                />
+                                <div style={{ position:"absolute", top:2, left:2, background:accent, color:"white", borderRadius:3, fontSize:8, fontWeight:800, padding:"1px 4px", lineHeight:1.4 }}>{i+1}</div>
+                                <button
+                                  onClick={() => {
+                                    const updated = hwFiles.filter((_,j)=>j!==i);
+                                    setHwFiles(updated);
+                                    if (updated.length === 0) { setScreen("upload"); setHwTopic(null); }
+                                  }}
+                                  style={{ position:"absolute", top:-5, right:-5, background:"#E2DDD8", border:"none", borderRadius:"50%", width:16, height:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, color:"#555", padding:0, lineHeight:1 }}>✕</button>
+                              </div>
+                            ))}
+                            {/* Add more pages button */}
+                            <button
+                              onClick={() => addPageRef.current.click()}
+                              style={{ width:54, height:72, border:`1.5px dashed ${accent}55`, borderRadius:6, background:"transparent", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, color:accent, fontSize:18, lineHeight:1 }}>
+                              <span>+</span>
+                              <span style={{ fontSize:8, fontWeight:800, letterSpacing:0.5 }}>PAGE</span>
+                            </button>
+                          </div>
+                          <div style={{ fontSize:10, color:accentDim, marginTop:8 }}>
+                            {hwFiles.length} page{hwFiles.length!==1?"s":""} · tap + to add more
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -4151,27 +4230,31 @@ ${SCHEMA_INSTRUCTIONS}`;
                   {TIMER_OPTIONS.map((t,i) => <button key={i} style={S.segBtn(timerIdx===i)} onClick={()=>setTimerIdx(i)}>{t.label}</button>)}
                 </div>
 
+                {/* Hidden file input for adding more pages on confirm screen */}
+                <input ref={addPageRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display:"none" }} multiple
+                  onChange={(e)=>{const files=Array.from(e.target.files);if(files.length)handleFiles(files,true);e.target.value="";}} />
+
                 <div style={S.btnRow}>
                   <button style={S.primaryBtn(false)}
                     onClick={() => {
                       if (hwTopic?._isGeneral || hwTopic?._isMix) {
                         // General / Mix: no topic to save, just start
-                        startSession(null, null, hwTopic?._isMix ? hwTopic : null);
+                        startSession(null, hwTopic?._isMix ? hwTopic : null);
                       } else if (hwTopic?._isBook || hwTopic?._isTextTopic) {
                         // Book/text topic: save to bank, no image needed
                         saveTopicToBank(hwTopic, subject?.id, currentUser?.username);
-                        startSession(null, null, hwTopic);
+                        startSession(null, hwTopic);
                       } else {
-                        // Homework upload topic: save to bank then start with image
+                        // Homework upload topic: save to bank then start with images
                         saveTopicToBank(hwTopic, subject?.id, currentUser?.username);
-                        startSession(hwFile?.base64 || null, hwFile?.mediaType || null, hwTopic);
+                        startSession(hwFiles.length > 0 ? hwFiles : null, hwTopic);
                       }
                     }}>
                     Let's Practice →
                   </button>
                   <button className="ghost-hover"
                     style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }}
-                    onClick={() => { setScreen("upload"); setHwFile(null); setHwTopic(null); }}>
+                    onClick={() => { setScreen("upload"); setHwFiles([]); setHwTopic(null); }}>
                     Cancel
                   </button>
                 </div>
@@ -5035,7 +5118,7 @@ ${SCHEMA_INSTRUCTIONS}`;
                             _fromCurriculum: true,
                           });
                           setDifficulty(session.difficulty ?? 1);
-                          setHwFile(null);
+                          setHwFiles([]);
                           setTestPrepScreen(null);
                           setScreen("confirm");
                         }} style={{ width:"100%", padding:"9px", background:accent, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer" }}>
@@ -5309,7 +5392,7 @@ ${SCHEMA_INSTRUCTIONS}`;
             )}
 
             <div style={S.btnRow}>
-              <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Go Again</button>
+              <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null/*topic*/)}>Go Again</button>
             </div>
             <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8 }}>
               {(() => { const dueCount = getDueCount(srsCards, subject?.id||"math"); return dueCount > 0 ? (
@@ -5334,7 +5417,7 @@ ${SCHEMA_INSTRUCTIONS}`;
             {!insightsLoading&&insights&&insights.length>0&&(<div style={{ animation:"fade-in .4s ease" }}>{insights.map((ins,i)=><InsightCard key={i} insight={ins}/>)}</div>)}
             {!insightsLoading&&insights&&insights.length===0&&(<div style={{ color:POS_COLOR, fontSize:18, fontWeight:700, textAlign:"center", padding:"32px 0" }}>🏆 Perfect session — no weak spots!</div>)}
             <div style={{ ...S.btnRow, marginTop:24 }}>
-              <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Practice Again</button>
+              <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null/*topic*/)}>Practice Again</button>
               <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }} onClick={()=>{clearTimer();setScreen("subjects");}}>Home</button>
             </div>
           </div>
@@ -5434,7 +5517,7 @@ ${SCHEMA_INSTRUCTIONS}`;
               </>);
             })()}
             <div style={{ ...S.btnRow, marginTop:24 }}>
-              <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null)}>Start Session</button>
+              <button style={S.primaryBtn(false)} onClick={()=>startSession(null,null/*topic*/)}>Start Session</button>
               <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }} onClick={()=>setScreen("upload")}>Home</button>
             </div>
           </div>
