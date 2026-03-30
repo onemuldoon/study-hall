@@ -3552,24 +3552,29 @@ ${SCHEMA_INSTRUCTIONS}`;
               const saveEditingTopic = async () => {
                 if (!adminCurrEditing?.topicName?.trim() || !adminCurrEditing?._subjectId) return;
                 setAdminCurrSaving(true);
-                const topic = {
-                  ...adminCurrEditing,
-                  topicKey: adminCurrEditing.topicKey || adminCurrEditing.topicName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""),
-                  updatedAt: new Date().toISOString(),
-                  subjectId: adminCurrEditing._subjectId,
-                };
-                await saveTopicToCurriculum(topic);
-                // Refresh the flat list
-                const fresh = await loadAllCurriculum();
-                setAdminCurrTopics(fresh);
-                setAdminCurrEditing(null);
-                setAdminCurrSaving(false);
+                try {
+                  const topic = {
+                    ...adminCurrEditing,
+                    topicKey: adminCurrEditing.topicKey || adminCurrEditing.topicName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""),
+                    updatedAt: new Date().toISOString(),
+                    subjectId: adminCurrEditing._subjectId,
+                  };
+                  await saveTopicToCurriculum(topic);
+                  // Refresh the flat list
+                  const fresh = await loadAllCurriculum();
+                  setAdminCurrTopics(fresh);
+                  setAdminCurrEditing(null);
+                } catch (err) {
+                  console.error("Failed to save topic:", err);
+                } finally {
+                  setAdminCurrSaving(false);
+                }
               };
 
               const deleteTopic = async (topicKey, subjectId) => {
                 await deleteTopicFromCurriculum(topicKey, subjectId);
                 setAdminCurrTopics(prev => prev.filter(t => !(t.topicKey===topicKey && t.subjectId===subjectId)));
-                if (adminTopicStudentPanel === topicKey) setAdminTopicStudentPanel(null);
+                if (adminTopicStudentPanel === topicKey + "_" + subjectId) setAdminTopicStudentPanel(null);
               };
 
               const toggleStudentForTopic = async (topic, username) => {
