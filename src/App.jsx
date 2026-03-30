@@ -1848,6 +1848,40 @@ async function saveCurriculum(topics, subjectId) {
   } catch(e) { console.error("saveCurriculum error", e); }
 }
 
+// Load topics from every subject in one call — returns flat array with .subjectId on each topic
+const CURR_SUBJECT_IDS = ["math","english","science","grammar","religion","social_studies","latin"];
+async function loadAllCurriculum() {
+  const results = await Promise.all(CURR_SUBJECT_IDS.map(async sid => {
+    const topics = await loadCurriculum(sid);
+    return topics.map(t => ({ ...t, subjectId: sid }));
+  }));
+  return results.flat().sort((a, b) => (b.updatedAt||"").localeCompare(a.updatedAt||""));
+}
+
+// Save/update a single topic within its subject's curriculum
+async function saveTopicToCurriculum(topic) {
+  const subjectId = topic.subjectId;
+  if (!subjectId) return;
+  const existing = await loadCurriculum(subjectId);
+  const idx = existing.findIndex(t => t.topicKey === topic.topicKey);
+  const { subjectId: _sid, _subjectId: _s2, ...topicWithoutSid } = topic; // don't persist subjectId/_subjectId inside the array (implicit from storage key)
+  const updated = idx >= 0
+    ? existing.map((t, i) => i === idx ? topicWithoutSid : t)
+    : [...existing, topicWithoutSid];
+  await saveCurriculum(updated, subjectId);
+}
+
+// Delete a single topic from its subject's curriculum
+async function deleteTopicFromCurriculum(topicKey, subjectId) {
+  const existing = await loadCurriculum(subjectId);
+  await saveCurriculum(existing.filter(t => t.topicKey !== topicKey), subjectId);
+}
+
+// Filter curriculum topics for a student (hidden if enabledFor is set and doesn't include them)
+function filterTopicsForUser(topics, username) {
+  return topics.filter(t => !t.enabledFor?.length || t.enabledFor.includes(username));
+}
+
 // ─── Test Prep AI Plan Generator ────────────────────────────────────────────
 async function generateTestPrepPlan({ subject, testDate, topics, materialsB64, materialsType, masteryData, username }) {
   const daysUntil = Math.max(1, Math.round((new Date(testDate) - new Date()) / 86400000));
@@ -2559,11 +2593,15 @@ export default function App() {
   const [topicBank, setTopicBank] = useState([]);
   const [curriculumTopics, setCurriculumTopics] = useState([]); // admin library topics for current subject
   // Admin curriculum editor state
-  const [adminCurrTab, setAdminCurrTab] = useState("english"); // which subject is open in curriculum editor
-  const [adminCurrTopics, setAdminCurrTopics] = useState([]); // topics for current admin subject
+  const [adminCurrTab, setAdminCurrTab] = useState("all"); // subject filter in unified topics view ("all" | subjectId)
+  const [adminCurrTopics, setAdminCurrTopics] = useState([]); // ALL topics across ALL subjects (flat, each has .subjectId)
   const [adminCurrLoading, setAdminCurrLoading] = useState(false);
-  const [adminCurrEditing, setAdminCurrEditing] = useState(null); // topic being edited/added
+  const [adminCurrEditing, setAdminCurrEditing] = useState(null); // topic being edited/added (includes _subjectId)
   const [adminCurrSaving, setAdminCurrSaving] = useState(false);
+  const [adminTopicStudentPanel, setAdminTopicStudentPanel] = useState(null); // topicKey whose student panel is open
+  const [adminTopicInputMode, setAdminTopicInputMode] = useState("text"); // "text" | "upload" for new topic creation
+  const [adminTopicDetecting, setAdminTopicDetecting] = useState(false); // scanning uploaded file for topic
+  const adminTopicFileRef = useRef(); // hidden file input for topic calibration upload
   const [topicDropOpen, setTopicDropOpen] = useState(false);
   // Dashboard state
   const [dashboardData, setDashboardData] = useState(null);
@@ -2599,7 +2637,9 @@ export default function App() {
     loadStats(currentUser.username).then(setHomeStats);
     loadTopicBank(subject.id, currentUser.username).then(setTopicBank);
     loadTestPreps(currentUser.username).then(setTestPreps);
-    loadCurriculum(subject.id).then(setCurriculumTopics);
+    loadCurriculum(subject.id).then(topics =>
+      setCurriculumTopics(currentUser.isAdmin ? topics : filterTopicsForUser(topics, currentUser.username))
+    );
     loadSrsCards(currentUser.username).then(setSrsCards);
     loadSessions(subject.id, currentUser.username).then(sessions => {
       const recent = sessions.slice(0, 10);
@@ -3417,13 +3457,15 @@ ${SCHEMA_INSTRUCTIONS}`;
 
             {/* Tab bar */}
             <div style={{ display:"flex", background:"#F0EEE9", borderRadius:8, padding:3, marginBottom:20 }}>
-              {[["pending","⏳ Pending"],["all","👥 All Users"],["students","📊 Dashboards"],["curriculum","📚 Curriculum"],["add","➕ Add User"]].map(([tab, label]) => (
+              {[["pending","⏳ Pending"],["all","👥 Users"],["students","📊 Dashboards"],["curriculum","📚 Topics"],["add","➕ Add"]].map(([tab, label]) => (
                 <button key={tab} onClick={() => {
                   setAdminTab(tab);
                   if (tab==="students") loadAdminStudentList();
                   if (tab==="curriculum") {
                     setAdminCurrLoading(true);
-                    loadCurriculum(adminCurrTab).then(t => { setAdminCurrTopics(t); setAdminCurrLoading(false); });
+                    setAdminCurrEditing(null);
+                    setAdminTopicStudentPanel(null);
+                    loadAllCurriculum().then(t => { setAdminCurrTopics(t); setAdminCurrLoading(false); });
                   }
                 }}
                   style={{ flex:1, padding:"8px 4px", background:adminTab===tab?"#1E3A5F":"transparent", border:"none", borderRadius:6, color:adminTab===tab?"#FFFFFF":"#9A9490", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1, transition:"all .15s" }}>
@@ -3490,245 +3532,366 @@ ${SCHEMA_INSTRUCTIONS}`;
             {/* Curriculum Library tab */}
             {adminTab === "curriculum" && (() => {
               const CURR_SUBJECTS = [
+                { id:"math",          name:"Math",          accent:"#1E3A5F" },
                 { id:"english",       name:"English",       accent:"#a78bfa" },
                 { id:"science",       name:"Science",       accent:"#34d399" },
-                { id:"math",          name:"Math",          accent:"#1E3A5F" },
-                { id:"latin",         name:"Latin",         accent:"#f472b6" },
+                { id:"grammar",       name:"Grammar",       accent:"#60a5fa" },
                 { id:"religion",      name:"Religion",      accent:"#fbbf24" },
                 { id:"social_studies",name:"Social Studies",accent:"#fb923c" },
-                { id:"grammar",       name:"Grammar",       accent:"#60a5fa" },
+                { id:"latin",         name:"Latin",         accent:"#f472b6" },
               ];
-              const currSubj = CURR_SUBJECTS.find(s => s.id === adminCurrTab) || CURR_SUBJECTS[0];
+              const subjectColor = (sid) => CURR_SUBJECTS.find(s=>s.id===sid)?.accent || "#9A9490";
+              const subjectName  = (sid) => CURR_SUBJECTS.find(s=>s.id===sid)?.name  || sid;
 
-              const saveEditing = async () => {
-                if (!adminCurrEditing?.topicName?.trim()) return;
+              // Topics shown in list (filtered by subject pill if not "all")
+              const visibleTopics = adminCurrTab === "all"
+                ? adminCurrTopics
+                : adminCurrTopics.filter(t => t.subjectId === adminCurrTab);
+
+              // ── Save/delete helpers that operate on the flat adminCurrTopics array ──
+              const saveEditingTopic = async () => {
+                if (!adminCurrEditing?.topicName?.trim() || !adminCurrEditing?._subjectId) return;
                 setAdminCurrSaving(true);
                 const topic = {
                   ...adminCurrEditing,
                   topicKey: adminCurrEditing.topicKey || adminCurrEditing.topicName.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""),
                   updatedAt: new Date().toISOString(),
+                  subjectId: adminCurrEditing._subjectId,
                 };
-                const existing = adminCurrTopics.findIndex(t => t.topicKey === topic.topicKey);
-                const updated = existing >= 0
-                  ? adminCurrTopics.map((t,i) => i === existing ? topic : t)
-                  : [...adminCurrTopics, topic];
-                await saveCurriculum(updated, adminCurrTab);
-                setAdminCurrTopics(updated);
+                await saveTopicToCurriculum(topic);
+                // Refresh the flat list
+                const fresh = await loadAllCurriculum();
+                setAdminCurrTopics(fresh);
                 setAdminCurrEditing(null);
                 setAdminCurrSaving(false);
               };
 
-              const deleteTopic = async (topicKey) => {
-                const updated = adminCurrTopics.filter(t => t.topicKey !== topicKey);
-                await saveCurriculum(updated, adminCurrTab);
-                setAdminCurrTopics(updated);
+              const deleteTopic = async (topicKey, subjectId) => {
+                await deleteTopicFromCurriculum(topicKey, subjectId);
+                setAdminCurrTopics(prev => prev.filter(t => !(t.topicKey===topicKey && t.subjectId===subjectId)));
+                if (adminTopicStudentPanel === topicKey) setAdminTopicStudentPanel(null);
               };
 
-              const addExemplar = () => {
-                setAdminCurrEditing(e => ({ ...e,
-                  exemplarQuestions: [...(e.exemplarQuestions||[]), { question:"", answer:"" }]
-                }));
+              const toggleStudentForTopic = async (topic, username) => {
+                const current = topic.enabledFor || [];
+                const updated = current.includes(username)
+                  ? current.filter(u => u !== username)
+                  : [...current, username];
+                const updatedTopic = { ...topic, enabledFor: updated.length ? updated : [] };
+                await saveTopicToCurriculum(updatedTopic);
+                setAdminCurrTopics(prev => prev.map(t =>
+                  t.topicKey === topic.topicKey && t.subjectId === topic.subjectId ? updatedTopic : t
+                ));
               };
 
-              const updateExemplar = (i, field, val) => {
-                setAdminCurrEditing(e => {
-                  const eq = [...(e.exemplarQuestions||[])];
-                  eq[i] = { ...eq[i], [field]: val };
-                  return { ...e, exemplarQuestions: eq };
-                });
+              const addExemplar = () => setAdminCurrEditing(e => ({ ...e, exemplarQuestions: [...(e.exemplarQuestions||[]), { question:"", answer:"" }] }));
+              const updateExemplar = (i, field, val) => setAdminCurrEditing(e => { const eq=[...(e.exemplarQuestions||[])]; eq[i]={...eq[i],[field]:val}; return {...e,exemplarQuestions:eq}; });
+              const removeExemplar = (i) => setAdminCurrEditing(e => ({ ...e, exemplarQuestions: (e.exemplarQuestions||[]).filter((_,j)=>j!==i) }));
+
+              // ── Scan an uploaded file to pre-fill topic fields ──
+              const handleTopicFileUpload = async (file) => {
+                if (!file) return;
+                try {
+                  setAdminTopicDetecting(true);
+                  const processed = await processOneFile(file);
+                  const detected = await detectHomeworkTopic([processed]);
+                  setAdminCurrEditing(e => ({
+                    ...e,
+                    topicName: e.topicName || detected.topicName || "",
+                    description: e.description || detected.description || "",
+                    topicKey: e.topicKey || detected.topicKey || "",
+                  }));
+                } catch { /* ignore — user can fill in manually */ }
+                finally { setAdminTopicDetecting(false); }
               };
 
-              const removeExemplar = (i) => {
-                setAdminCurrEditing(e => ({
-                  ...e, exemplarQuestions: (e.exemplarQuestions||[]).filter((_,j)=>j!==i)
-                }));
-              };
+              const approvedStudents = adminUsers.filter(u => u.is_approved && !u.is_admin);
 
               return (
                 <div>
-                  {/* Subject tabs */}
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:16 }}>
+                  {/* ── Hidden file input for calibration upload ── */}
+                  <input ref={adminTopicFileRef} type="file" accept="image/jpeg,image/png,image/webp,.pdf" style={{ display:"none" }}
+                    onChange={(e) => { if(e.target.files[0]) handleTopicFileUpload(e.target.files[0]); e.target.value=""; }} />
+
+                  {/* ── Header row ── */}
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:800, color:"#1E3A5F", letterSpacing:1 }}>TOPIC LIBRARY</div>
+                      <div style={{ fontSize:10, color:"#9A9490", marginTop:2 }}>{adminCurrTopics.length} topic{adminCurrTopics.length!==1?"s":""} across all subjects</div>
+                    </div>
+                    {!adminCurrEditing && (
+                      <button
+                        onClick={() => { setAdminCurrEditing({ topicName:"", description:"", gradeLevel:"", difficultyNotes:"", exemplarQuestions:[], enabledFor:[], _subjectId: adminCurrTab !== "all" ? adminCurrTab : "math" }); setAdminTopicInputMode("text"); }}
+                        style={{ padding:"8px 14px", background:"#1E3A5F", border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer" }}>
+                        + New Topic
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ── Subject filter pills ── */}
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:16 }}>
+                    <button onClick={() => setAdminCurrTab("all")}
+                      style={{ padding:"4px 12px", background:adminCurrTab==="all"?"#1E3A5F":"transparent", border:"1.5px solid #1E3A5F44", borderRadius:20, color:adminCurrTab==="all"?"#fff":"#1E3A5F", fontSize:11, fontWeight:800, cursor:"pointer" }}>
+                      All
+                    </button>
                     {CURR_SUBJECTS.map(s => (
-                      <button key={s.id}
-                        onClick={() => {
-                          setAdminCurrTab(s.id);
-                          setAdminCurrEditing(null);
-                          setAdminCurrLoading(true);
-                          loadCurriculum(s.id).then(t => { setAdminCurrTopics(t); setAdminCurrLoading(false); });
-                        }}
-                        style={{ padding:"5px 10px", background:adminCurrTab===s.id?s.accent:"transparent", border:`1.5px solid ${s.accent}44`, borderRadius:20, color:adminCurrTab===s.id?"#fff":s.accent, fontSize:11, fontWeight:800, cursor:"pointer" }}>
+                      <button key={s.id} onClick={() => setAdminCurrTab(s.id)}
+                        style={{ padding:"4px 12px", background:adminCurrTab===s.id?s.accent:"transparent", border:`1.5px solid ${s.accent}55`, borderRadius:20, color:adminCurrTab===s.id?"#fff":s.accent, fontSize:11, fontWeight:800, cursor:"pointer" }}>
                         {s.name}
                       </button>
                     ))}
                   </div>
 
-                  {/* ── Seed Starter Pack button ── */}
-                  {!adminCurrEditing && STARTER_PACKS[adminCurrTab]?.length > 0 && (() => {
-                    const packTopics = STARTER_PACKS[adminCurrTab];
-                    const existingKeys = new Set(adminCurrTopics.map(t => t.topicKey));
-                    const newTopics = packTopics.filter(t => !existingKeys.has(t.topicKey));
-                    if (newTopics.length === 0) return (
-                      <div style={{ background:"#1a2a1a", border:"1px solid #4ade8033", borderRadius:10, padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", gap:10 }}>
-                        <span style={{ color:"#4ade80", fontSize:13 }}>✓</span>
-                        <span style={{ fontSize:12, color:"#4ade80", fontWeight:700 }}>All starter topics already loaded for {currSubj.name}</span>
+                  {/* ── New / Edit Topic Form ── */}
+                  {adminCurrEditing && (
+                    <div style={{ background:"#1a1a1a", border:`1.5px solid #2BC48A44`, borderRadius:12, padding:16, marginBottom:18 }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:"#2BC48A", marginBottom:12, letterSpacing:1, textTransform:"uppercase" }}>
+                        {adminCurrEditing.topicKey ? "Edit Topic" : "New Topic"}
                       </div>
-                    );
-                    return (
-                      <div style={{ background:"#1a1a2a", border:`1.5px dashed ${currSubj.accent}55`, borderRadius:10, padding:14, marginBottom:16 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-                          <div>
-                            <div style={{ fontSize:12, fontWeight:800, color:currSubj.accent, letterSpacing:1, textTransform:"uppercase" }}>
-                              📚 Starter Pack — {currSubj.name}
-                            </div>
-                            <div style={{ fontSize:11, color:"#9A9490", marginTop:3 }}>
-                              {newTopics.length} topic{newTopics.length>1?"s":""} ready to load, calibrated to your curriculum
-                            </div>
+
+                      {/* Subject selector (new topics only) */}
+                      {!adminCurrEditing.topicKey && (
+                        <div style={{ marginBottom:12 }}>
+                          <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, marginBottom:6, fontWeight:700, textTransform:"uppercase" }}>Subject *</div>
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                            {CURR_SUBJECTS.map(s => (
+                              <button key={s.id} onClick={() => setAdminCurrEditing(e => ({...e, _subjectId: s.id}))}
+                                style={{ padding:"5px 12px", background:adminCurrEditing._subjectId===s.id?s.accent:"transparent", border:`1.5px solid ${s.accent}55`, borderRadius:20, color:adminCurrEditing._subjectId===s.id?"#fff":s.accent, fontSize:11, fontWeight:800, cursor:"pointer" }}>
+                                {s.name}
+                              </button>
+                            ))}
                           </div>
-                          <button
-                            onClick={async () => {
-                              setAdminCurrLoading(true);
-                              const toAdd = newTopics.map(t => ({ ...t, updatedAt: new Date().toISOString(), _seeded: true }));
-                              const updated = [...adminCurrTopics, ...toAdd];
-                              await saveCurriculum(updated, adminCurrTab);
-                              setAdminCurrTopics(updated);
-                              setAdminCurrLoading(false);
-                            }}
-                            style={{ padding:"8px 14px", background:currSubj.accent, border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
-                            Load All →
+                        </div>
+                      )}
+
+                      {/* Input mode toggle (new topics only) */}
+                      {!adminCurrEditing.topicKey && (
+                        <div style={{ marginBottom:14 }}>
+                          <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, marginBottom:6, fontWeight:700, textTransform:"uppercase" }}>Calibration Source</div>
+                          <div style={{ display:"flex", gap:8 }}>
+                            <button onClick={() => setAdminTopicInputMode("text")}
+                              style={{ flex:1, padding:"8px", background:adminTopicInputMode==="text"?"#2BC48A22":"transparent", border:`1.5px solid ${adminTopicInputMode==="text"?"#2BC48A":"#3a3a3a"}`, borderRadius:8, color:adminTopicInputMode==="text"?"#2BC48A":"#9A9490", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                              ✏️ Type Description
+                            </button>
+                            <button onClick={() => setAdminTopicInputMode("upload")}
+                              style={{ flex:1, padding:"8px", background:adminTopicInputMode==="upload"?"#60a5fa22":"transparent", border:`1.5px solid ${adminTopicInputMode==="upload"?"#60a5fa":"#3a3a3a"}`, borderRadius:8, color:adminTopicInputMode==="upload"?"#60a5fa":"#9A9490", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                              📄 Upload Page / PDF
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Upload trigger (upload mode) */}
+                      {!adminCurrEditing.topicKey && adminTopicInputMode === "upload" && (
+                        <div style={{ marginBottom:14 }}>
+                          <button onClick={() => adminTopicFileRef.current.click()}
+                            style={{ width:"100%", padding:"14px", background:"#1a2a3a", border:"1.5px dashed #60a5fa55", borderRadius:8, color:"#60a5fa", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                            {adminTopicDetecting ? "⚙ Scanning…" : "📎 Choose File to Scan"}
                           </button>
+                          <div style={{ fontSize:10, color:"#9A9490", marginTop:5 }}>
+                            Upload a homework page, textbook excerpt, or worksheet — the AI reads it and pre-fills the topic name and description below.
+                          </div>
                         </div>
-                        {/* Preview of topics to be added */}
-                        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                          {newTopics.map((t,i) => (
-                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
-                              <div style={{ width:5, height:5, borderRadius:"50%", background:currSubj.accent, flexShrink:0 }}/>
-                              <div style={{ fontSize:11, color:"#ddd", fontWeight:700 }}>{t.topicName}</div>
-                              <div style={{ fontSize:10, color:"#666", flex:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.description}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                      )}
 
-                  {/* Editor panel */}
-                  {adminCurrEditing ? (
-                    <div style={{ background:"#1a1a1a", border:`1.5px solid ${currSubj.accent}44`, borderRadius:12, padding:16, marginBottom:16 }}>
-                      <div style={{ fontSize:12, fontWeight:800, color:currSubj.accent, marginBottom:12, letterSpacing:1, textTransform:"uppercase" }}>
-                        {adminCurrEditing.topicKey ? "Edit Topic" : "New Topic"} — {currSubj.name}
-                      </div>
-
+                      {/* Core fields */}
                       {[
-                        { label:"Topic Name *", field:"topicName", placeholder:"e.g. Multiplying Fractions by Whole Numbers" },
-                        { label:"Description", field:"description", placeholder:"One sentence a student sees — what this topic covers" },
-                        { label:"Grade / Level", field:"gradeLevel", placeholder:"e.g. 6th Grade · Saxon Math 7/6 Ch.4" },
+                        { label:"Topic Name *", field:"topicName", placeholder:"e.g. Diagramming Compound-Complex Sentences" },
+                        { label:"Student Description", field:"description", placeholder:"One sentence students see — what this topic covers" },
+                        { label:"Grade / Level", field:"gradeLevel", placeholder:"e.g. 7th Grade · Writing & Grammar Ch.12" },
                       ].map(({ label, field, placeholder }) => (
                         <div key={field} style={{ marginBottom:10 }}>
                           <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, marginBottom:4, fontWeight:700, textTransform:"uppercase" }}>{label}</div>
-                          <input value={adminCurrEditing[field]||""} onChange={e=>setAdminCurrEditing(ed=>({...ed,[field]:e.target.value}))}
+                          <input value={adminCurrEditing[field]||""} onChange={e => setAdminCurrEditing(ed => ({...ed,[field]:e.target.value}))}
                             placeholder={placeholder}
                             style={{ width:"100%", padding:"8px 10px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#fff", fontSize:12, boxSizing:"border-box" }}/>
                         </div>
                       ))}
 
-                      {/* Difficulty notes — the critical calibration field */}
+                      {/* Difficulty calibration notes */}
                       <div style={{ marginBottom:10 }}>
-                        <div style={{ fontSize:10, color:"#fbbf24", letterSpacing:2, marginBottom:4, fontWeight:700, textTransform:"uppercase" }}>Difficulty Calibration Notes *</div>
+                        <div style={{ fontSize:10, color:"#fbbf24", letterSpacing:2, marginBottom:4, fontWeight:700, textTransform:"uppercase" }}>AI Calibration Notes</div>
                         <div style={{ fontSize:10, color:"#9A9490", marginBottom:6, lineHeight:1.5 }}>
-                          Describe the expected difficulty precisely: vocabulary, number complexity, number of steps, what concepts students already know. This is injected into the AI prompt to calibrate every generated question.
+                          Describe the expected difficulty precisely — vocabulary, number ranges, steps, prerequisites. Injected directly into the AI prompt.
                         </div>
                         <textarea value={adminCurrEditing.difficultyNotes||""} rows={4}
-                          onChange={e=>setAdminCurrEditing(ed=>({...ed,difficultyNotes:e.target.value}))}
-                          placeholder={"e.g. Students multiply a simple fraction (denominator ≤ 12) by a 1-digit whole number. They should simplify the result. Problems use unit fractions and familiar fractions like 1/2, 2/3, 3/4. No mixed numbers yet. Answer is always less than 5. Matches Saxon Math 7/6 Lesson 64."}
+                          onChange={e => setAdminCurrEditing(ed => ({...ed, difficultyNotes:e.target.value}))}
+                          placeholder="e.g. Students identify and label the two independent clauses and one or more dependent clauses in a compound-complex sentence. They use standard Reed-Kellogg diagramming conventions. Sentences are 12–20 words, literary style, no ambiguous modifiers."
                           style={{ width:"100%", padding:"8px 10px", background:"#2a2a2a", border:"1.5px solid #fbbf2444", borderRadius:6, color:"#fff", fontSize:11, lineHeight:1.6, resize:"vertical", boxSizing:"border-box" }}/>
                       </div>
 
-                      {/* Exemplar questions */}
+                      {/* Exemplar Q&A pairs */}
                       <div style={{ marginBottom:12 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                           <div>
                             <div style={{ fontSize:10, color:"#60a5fa", letterSpacing:2, fontWeight:700, textTransform:"uppercase" }}>Exemplar Questions</div>
-                            <div style={{ fontSize:10, color:"#9A9490", marginTop:2 }}>2–3 real examples from homework/class. The AI will match this exact difficulty.</div>
+                            <div style={{ fontSize:10, color:"#9A9490", marginTop:2 }}>2–3 real examples. The AI matches this exact difficulty.</div>
                           </div>
                           <button onClick={addExemplar}
-                            style={{ background:"#60a5fa22", border:"1px solid #60a5fa44", borderRadius:6, color:"#60a5fa", fontSize:11, padding:"4px 10px", cursor:"pointer", fontWeight:700 }}>
-                            + Add
-                          </button>
+                            style={{ background:"#60a5fa22", border:"1px solid #60a5fa44", borderRadius:6, color:"#60a5fa", fontSize:11, padding:"4px 10px", cursor:"pointer", fontWeight:700 }}>+ Add</button>
                         </div>
                         {(adminCurrEditing.exemplarQuestions||[]).map((ex,i) => (
                           <div key={i} style={{ background:"#222", border:"1px solid #333", borderRadius:8, padding:10, marginBottom:8 }}>
-                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                               <div style={{ fontSize:10, color:"#9A9490", fontWeight:700 }}>Example {i+1}</div>
-                              <button onClick={()=>removeExemplar(i)} style={{ background:"none", border:"none", color:"#ff6b6b", cursor:"pointer", fontSize:11 }}>✕</button>
+                              <button onClick={() => removeExemplar(i)} style={{ background:"none", border:"none", color:"#ff6b6b", cursor:"pointer", fontSize:11 }}>✕</button>
                             </div>
-                            <input value={ex.question||""} onChange={e=>updateExemplar(i,"question",e.target.value)}
-                              placeholder="Question (as it would appear on homework)"
+                            <input value={ex.question||""} onChange={e => updateExemplar(i,"question",e.target.value)}
+                              placeholder="Question as it appears on homework"
                               style={{ width:"100%", padding:"6px 8px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:4, color:"#fff", fontSize:11, marginBottom:6, boxSizing:"border-box" }}/>
-                            <input value={ex.answer||""} onChange={e=>updateExemplar(i,"answer",e.target.value)}
+                            <input value={ex.answer||""} onChange={e => updateExemplar(i,"answer",e.target.value)}
                               placeholder="Correct answer"
                               style={{ width:"100%", padding:"6px 8px", background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:4, color:"#fff", fontSize:11, boxSizing:"border-box" }}/>
                           </div>
                         ))}
                       </div>
 
+                      {/* Student visibility */}
+                      {approvedStudents.length > 0 && (
+                        <div style={{ marginBottom:14 }}>
+                          <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, marginBottom:6, fontWeight:700, textTransform:"uppercase" }}>Visible To</div>
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                            <button
+                              onClick={() => setAdminCurrEditing(e => ({...e, enabledFor:[]}))}
+                              style={{ padding:"4px 12px", background:!(adminCurrEditing.enabledFor?.length)?"#2BC48A":"transparent", border:`1.5px solid #2BC48A55`, borderRadius:20, color:!(adminCurrEditing.enabledFor?.length)?"#fff":"#2BC48A", fontSize:11, fontWeight:800, cursor:"pointer" }}>
+                              All Students
+                            </button>
+                            {approvedStudents.map(u => {
+                              const on = adminCurrEditing.enabledFor?.includes(u.username);
+                              return (
+                                <button key={u.username}
+                                  onClick={() => {
+                                    const cur = adminCurrEditing.enabledFor || [];
+                                    setAdminCurrEditing(e => ({...e, enabledFor: on ? cur.filter(x=>x!==u.username) : [...cur, u.username]}));
+                                  }}
+                                  style={{ padding:"4px 12px", background:on?"#60a5fa":"transparent", border:`1.5px solid #60a5fa55`, borderRadius:20, color:on?"#fff":"#60a5fa", fontSize:11, fontWeight:800, cursor:"pointer" }}>
+                                  {u.display_name || u.username}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div style={{ fontSize:10, color:"#9A9490", marginTop:5 }}>
+                            {!(adminCurrEditing.enabledFor?.length) ? "All approved students will see this topic." : `Only ${adminCurrEditing.enabledFor.length} selected student${adminCurrEditing.enabledFor.length!==1?"s":""} will see this topic.`}
+                          </div>
+                        </div>
+                      )}
+
                       <div style={{ display:"flex", gap:8 }}>
-                        <button onClick={saveEditing} disabled={adminCurrSaving||!adminCurrEditing.topicName?.trim()}
-                          style={{ flex:1, padding:"10px", background:currSubj.accent, border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer", opacity:adminCurrSaving||!adminCurrEditing.topicName?.trim()?0.5:1 }}>
+                        <button onClick={saveEditingTopic} disabled={adminCurrSaving || !adminCurrEditing.topicName?.trim()}
+                          style={{ flex:1, padding:"10px", background:"#2BC48A", border:"none", borderRadius:8, color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer", opacity:adminCurrSaving||!adminCurrEditing.topicName?.trim()?0.5:1 }}>
                           {adminCurrSaving ? "Saving…" : "Save Topic"}
                         </button>
-                        <button onClick={()=>setAdminCurrEditing(null)}
+                        <button onClick={() => setAdminCurrEditing(null)}
                           style={{ padding:"10px 16px", background:"transparent", border:"1px solid #3a3a3a", borderRadius:8, color:"#9A9490", fontSize:13, cursor:"pointer" }}>
                           Cancel
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <button onClick={()=>setAdminCurrEditing({ topicName:"", description:"", gradeLevel:"", difficultyNotes:"", exemplarQuestions:[] })}
-                      style={{ width:"100%", padding:"11px", background:"transparent", border:`1.5px dashed ${currSubj.accent}55`, borderRadius:10, color:currSubj.accent, fontSize:13, fontWeight:700, cursor:"pointer", marginBottom:16 }}>
-                      + Add Topic to {currSubj.name} Library
-                    </button>
                   )}
 
-                  {/* Topic list */}
+                  {/* ── Topic List ── */}
                   {adminCurrLoading
-                    ? <div style={{ textAlign:"center", color:"#9A9490", padding:24 }}>Loading…</div>
-                    : adminCurrTopics.length === 0 && !adminCurrEditing
-                      ? <div style={{ textAlign:"center", color:"#9A9490", padding:24, fontSize:13 }}>
-                          No topics yet for {currSubj.name}.<br/>
-                          <span style={{ fontSize:11 }}>Add topics above — students will see them immediately.</span>
+                    ? <div style={{ textAlign:"center", color:"#9A9490", padding:32 }}>Loading all topics…</div>
+                    : visibleTopics.length === 0
+                      ? <div style={{ textAlign:"center", color:"#9A9490", padding:32, fontSize:13 }}>
+                          No topics yet{adminCurrTab !== "all" ? ` for ${subjectName(adminCurrTab)}` : ""}.<br/>
+                          <span style={{ fontSize:11 }}>Click "New Topic" above to create your first one.</span>
                         </div>
-                      : adminCurrTopics.map(t => (
-                        <div key={t.topicKey} style={{ background:"#1a1a1a", border:`1px solid ${currSubj.accent}33`, borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
-                            <div style={{ flex:1 }}>
-                              <div style={{ fontSize:14, fontWeight:800, color:currSubj.accent, marginBottom:2 }}>{t.topicName}</div>
-                              {t.gradeLevel && <div style={{ fontSize:10, color:"#9A9490", marginBottom:4, fontWeight:600 }}>{t.gradeLevel}</div>}
-                              {t.description && <div style={{ fontSize:11, color:"#888", lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
-                              {t.difficultyNotes && (
-                                <div style={{ background:"#2a2a2a", borderRadius:6, padding:"6px 8px", marginTop:6 }}>
-                                  <div style={{ fontSize:9, color:"#fbbf24", letterSpacing:2, fontWeight:700, marginBottom:3, textTransform:"uppercase" }}>Difficulty Calibration</div>
-                                  <div style={{ fontSize:10, color:"#888", lineHeight:1.5 }}>{t.difficultyNotes.slice(0,180)}{t.difficultyNotes.length>180?"…":""}</div>
+                      : visibleTopics.map(t => {
+                          const accent = subjectColor(t.subjectId);
+                          const isStudentPanelOpen = adminTopicStudentPanel === t.topicKey + "_" + t.subjectId;
+                          return (
+                            <div key={t.topicKey+"_"+t.subjectId} style={{ background:"#1a1a1a", border:`1px solid ${accent}33`, borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
+                              {/* Topic header row */}
+                              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                                <div style={{ flex:1 }}>
+                                  {/* Subject badge */}
+                                  <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5 }}>
+                                    <span style={{ background:accent+"22", border:`1px solid ${accent}44`, borderRadius:4, fontSize:9, fontWeight:800, color:accent, padding:"2px 7px", letterSpacing:0.5 }}>
+                                      {subjectName(t.subjectId).toUpperCase()}
+                                    </span>
+                                    {t.gradeLevel && <span style={{ fontSize:9, color:"#9A9490", fontWeight:600 }}>{t.gradeLevel}</span>}
+                                    {t.enabledFor?.length > 0 && (
+                                      <span style={{ background:"#60a5fa18", border:"1px solid #60a5fa44", borderRadius:4, fontSize:9, fontWeight:800, color:"#60a5fa", padding:"2px 7px" }}>
+                                        {t.enabledFor.length} student{t.enabledFor.length!==1?"s":""}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize:14, fontWeight:800, color:accent, marginBottom:3 }}>{t.topicName}</div>
+                                  {t.description && <div style={{ fontSize:11, color:"#888", lineHeight:1.5, marginBottom:4 }}>{t.description}</div>}
+                                  {t.difficultyNotes && (
+                                    <div style={{ background:"#2a2a2a", borderRadius:6, padding:"5px 8px", marginTop:4 }}>
+                                      <div style={{ fontSize:9, color:"#fbbf24", letterSpacing:1.5, fontWeight:700, marginBottom:2, textTransform:"uppercase" }}>AI Calibration</div>
+                                      <div style={{ fontSize:10, color:"#888", lineHeight:1.5 }}>{t.difficultyNotes.slice(0,160)}{t.difficultyNotes.length>160?"…":""}</div>
+                                    </div>
+                                  )}
+                                  {(t.exemplarQuestions||[]).length > 0 && (
+                                    <div style={{ fontSize:9, color:"#60a5fa", marginTop:5, fontWeight:700 }}>
+                                      {t.exemplarQuestions.length} exemplar{t.exemplarQuestions.length!==1?"s":""}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                              {(t.exemplarQuestions||[]).length > 0 && (
-                                <div style={{ fontSize:9, color:"#60a5fa", marginTop:6, fontWeight:700 }}>
-                                  {t.exemplarQuestions.length} exemplar question{t.exemplarQuestions.length!==1?"s":""} attached
+                                <div style={{ display:"flex", flexDirection:"column", gap:5, flexShrink:0 }}>
+                                  <button onClick={() => setAdminCurrEditing({...t, _subjectId: t.subjectId})}
+                                    style={{ background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#9A9490", fontSize:11, padding:"4px 10px", cursor:"pointer" }}>Edit</button>
+                                  <button
+                                    onClick={() => setAdminTopicStudentPanel(isStudentPanelOpen ? null : t.topicKey+"_"+t.subjectId)}
+                                    style={{ background: isStudentPanelOpen?"#60a5fa22":"#1a2a3a", border:`1px solid #60a5fa${isStudentPanelOpen?"88":"33"}`, borderRadius:6, color:"#60a5fa", fontSize:11, padding:"4px 10px", cursor:"pointer", fontWeight:700 }}>
+                                    👥 {isStudentPanelOpen ? "Hide" : "Students"}
+                                  </button>
+                                  <button onClick={() => deleteTopic(t.topicKey, t.subjectId)}
+                                    style={{ background:"#ff6b6b11", border:"1px solid #ff6b6b33", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"4px 10px", cursor:"pointer" }}>Delete</button>
+                                </div>
+                              </div>
+
+                              {/* Student visibility panel */}
+                              {isStudentPanelOpen && (
+                                <div style={{ marginTop:12, paddingTop:12, borderTop:"1px solid #2a2a2a" }}>
+                                  <div style={{ fontSize:10, color:"#9A9490", letterSpacing:2, fontWeight:700, marginBottom:8, textTransform:"uppercase" }}>Student Visibility</div>
+                                  {approvedStudents.length === 0
+                                    ? <div style={{ fontSize:11, color:"#9A9490" }}>No approved students yet.</div>
+                                    : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                        {/* "All students" toggle */}
+                                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:"#2a2a2a", borderRadius:7 }}>
+                                          <div>
+                                            <div style={{ fontSize:12, fontWeight:700, color:"#ddd" }}>All Students</div>
+                                            <div style={{ fontSize:10, color:"#9A9490" }}>Remove all restrictions</div>
+                                          </div>
+                                          <button
+                                            onClick={async () => {
+                                              const updatedTopic = { ...t, enabledFor: [] };
+                                              await saveTopicToCurriculum(updatedTopic);
+                                              setAdminCurrTopics(prev => prev.map(x => x.topicKey===t.topicKey&&x.subjectId===t.subjectId ? updatedTopic : x));
+                                            }}
+                                            style={{ padding:"4px 12px", background:!(t.enabledFor?.length)?"#2BC48A":"#2a3a2a", border:`1px solid ${!(t.enabledFor?.length)?"#2BC48A":"#3a4a3a"}`, borderRadius:6, color:!(t.enabledFor?.length)?"#fff":"#888", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                                            {!(t.enabledFor?.length) ? "✓ Enabled" : "Enable All"}
+                                          </button>
+                                        </div>
+                                        {/* Per-student rows */}
+                                        {approvedStudents.map(u => {
+                                          const isOn = !t.enabledFor?.length || t.enabledFor.includes(u.username);
+                                          const isRestricted = t.enabledFor?.length > 0;
+                                          return (
+                                            <div key={u.username} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:"#222", borderRadius:7 }}>
+                                              <div>
+                                                <div style={{ fontSize:12, fontWeight:700, color:"#ddd" }}>{u.display_name || u.username}</div>
+                                                <div style={{ fontSize:10, color:"#9A9490" }}>{u.username}</div>
+                                              </div>
+                                              <button
+                                                onClick={() => toggleStudentForTopic(t, u.username)}
+                                                style={{ padding:"4px 14px", background: isOn?"#2BC48A22":"#3a1a1a", border:`1px solid ${isOn?"#2BC48A55":"#5a2a2a"}`, borderRadius:6, color: isOn?"#2BC48A":"#ff6b6b", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                                                {isOn ? (isRestricted ? "✓ On" : "✓ On") : "Off"}
+                                              </button>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                  }
                                 </div>
                               )}
                             </div>
-                            <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                              <button onClick={()=>setAdminCurrEditing({...t})}
-                                style={{ background:"#2a2a2a", border:"1px solid #3a3a3a", borderRadius:6, color:"#9A9490", fontSize:11, padding:"4px 10px", cursor:"pointer" }}>
-                                Edit
-                              </button>
-                              <button onClick={()=>deleteTopic(t.topicKey)}
-                                style={{ background:"#ff6b6b11", border:"1px solid #ff6b6b33", borderRadius:6, color:"#ff6b6b", fontSize:11, padding:"4px 10px", cursor:"pointer" }}>
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
+                          );
+                        })
                   }
                 </div>
               );
@@ -4798,7 +4961,9 @@ ${SCHEMA_INSTRUCTIONS}`;
               {SUBJECTS.map(sub => (
                 <button key={sub.id} onClick={() => {
                     setTpSetup(s => ({...s, subject:sub}));
-                    loadCurriculum(sub.id).then(setTpCurriculumTopics);
+                    loadCurriculum(sub.id).then(topics =>
+                      setTpCurriculumTopics(currentUser?.isAdmin ? topics : filterTopicsForUser(topics, currentUser?.username))
+                    );
                   }}
                   style={{ padding:"10px 12px", background:tpSetup.subject?.id===sub.id ? sub.accent+"18" : "#F8F6F3", border:`1.5px solid ${tpSetup.subject?.id===sub.id ? sub.accent : "#E2DDD8"}`, borderRadius:10, cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"all .15s" }}>
                   <SubjectIcon id={sub.id} size={16} color={tpSetup.subject?.id===sub.id ? sub.accent : "#9A9490"} strokeWidth={1.8}/>
