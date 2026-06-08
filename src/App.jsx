@@ -175,6 +175,46 @@ const STARTER_PACKS = {
         { question: "A recipe uses 2 cups flour for 3 cups sugar. For 9 cups sugar, how much flour?", answer: "6 cups" },
       ]
     },
+    {
+      topicKey: "solving_equations",
+      topicName: "Solving One-Step Equations",
+      description: "Finding the value of a single variable using addition, subtraction, multiplication, or division",
+      gradeLevel: "6th–7th Grade",
+      difficultyNotes: "Students solve one-step equations with a single variable (x) using inverse operations. Addition/subtraction equations use integers between −20 and +20 (e.g. x + 7 = 12, x − 3 = −1). Multiplication/division equations use whole-number coefficients and divisors between 2 and 12 with integer solutions (e.g. 4x = 28, x/5 = 6). No negative coefficients or fractions in equations yet. Students must show the operation used to isolate the variable. No multi-step equations.",
+      exemplarQuestions: [
+        { question: "x + 9 = 15. What is x?", answer: "x = 6" },
+        { question: "x − 4 = −2. What is x?", answer: "x = 2" },
+        { question: "3x = 24. What is x?", answer: "x = 8" },
+        { question: "x ÷ 7 = 4. What is x?", answer: "x = 28" },
+      ]
+    },
+    {
+      topicKey: "linear_equations",
+      topicName: "Linear Equations & Graphing (y = mx + b)",
+      description: "Slope, y-intercept, and graphing lines on the coordinate plane",
+      gradeLevel: "7th Grade",
+      difficultyNotes: "Students work with linear equations in slope-intercept form y = mx + b. They identify slope (m) and y-intercept (b) from an equation, calculate slope from two points using rise/run, and determine whether a slope is positive, negative, zero, or undefined. They graph a line by plotting the y-intercept and using the slope to find a second point. Slope values are simple fractions or integers (e.g. 2, −3, 1/2). Students also write an equation given slope and y-intercept. No systems of equations yet.",
+      exemplarQuestions: [
+        { question: "What is the slope of y = 3x − 5?", answer: "3" },
+        { question: "What is the y-intercept of y = −2x + 4?", answer: "4 (the line crosses the y-axis at (0, 4))" },
+        { question: "What is the slope between points (1, 2) and (3, 8)?", answer: "3" },
+        { question: "Write the equation of a line with slope 2 and y-intercept −1.", answer: "y = 2x − 1" },
+      ]
+    },
+    {
+      topicKey: "geometry_shapes",
+      topicName: "Geometry: Area, Perimeter, Volume & Surface Area",
+      description: "Calculating measurements of 2D and 3D shapes including rectangles, triangles, circles, and solids",
+      gradeLevel: "6th–7th Grade",
+      difficultyNotes: "Students apply formulas for 2D shapes: perimeter and area of rectangles (P = 2l+2w, A = lw), triangles (A = ½bh), and circles (C = 2πr, A = πr²). For 3D shapes they find surface area and volume of rectangular prisms (V = lwh), triangular prisms, cylinders (V = πr²h), cones (V = ⅓πr²h), spheres (V = 4/3πr³), and pyramids (V = ⅓Bh). Numbers are kept manageable (dimensions ≤ 20, radius ≤ 10). Students use π ≈ 3.14 or leave answers in terms of π. No coordinate geometry or composite figures yet.",
+      exemplarQuestions: [
+        { question: "A rectangle has length 8 and width 5. What is its area?", answer: "40 square units" },
+        { question: "A triangle has base 6 and height 9. What is its area?", answer: "27 square units" },
+        { question: "A circle has radius 4. What is its area? (use π ≈ 3.14)", answer: "≈ 50.24 square units" },
+        { question: "A rectangular prism is 3 × 4 × 5. What is its volume?", answer: "60 cubic units" },
+        { question: "A cylinder has radius 3 and height 7. What is its volume? (use π ≈ 3.14)", answer: "≈ 197.82 cubic units" },
+      ]
+    },
   ],
   science: [
     {
