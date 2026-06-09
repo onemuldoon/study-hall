@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, Component } from "react";
 import { storage } from "./lib/supabase.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -2285,8 +2285,11 @@ Dyslexia rules: SHORT question text, no clutter, unambiguous wording. Multiple c
 ${SCHEMA_INSTRUCTIONS}` });
   }
 
-  // Token budget: ~300 tokens per question + 400 overhead, min 2000
-  const tokenBudget = Math.max(2000, qCount * 300 + 400);
+  // Token budget: math/science use ~300 tokens/q; Latin, English, Religion
+  // need ~500 tokens/q because answers include Latin text + English translations.
+  const verboseSubjects = ["latin", "english", "religion"];
+  const tokensPerQ = verboseSubjects.includes(subject?.id) ? 500 : 300;
+  const tokenBudget = Math.max(2000, qCount * tokensPerQ + 400);
   const res = await callAPI([{ role:"user", content:blocks }], tokenBudget);
   const text = await res.text();
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0,400)}`);
@@ -2545,7 +2548,35 @@ const BrainWizLogo = ({ size = 48 }) => (
   </svg>
 );
 
-export default function App() {
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error("BrainWiz render error:", error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight:"100vh", background:"#F0EEE9", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ background:"#fff", border:"1px solid #E2DDD8", borderRadius:14, padding:"36px 32px", maxWidth:520, width:"100%", textAlign:"center" }}>
+            <div style={{ fontSize:38, marginBottom:12 }}>⚠️</div>
+            <div style={{ fontSize:20, fontWeight:800, color:"#1E3A5F", marginBottom:8 }}>Something went wrong</div>
+            <div style={{ fontSize:13, color:"#9A9490", marginBottom:20, lineHeight:1.7 }}>
+              {this.state.error?.message || "An unexpected error occurred."}
+            </div>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              style={{ background:"#1E3A5F", color:"#fff", border:"none", borderRadius:8, padding:"13px 28px", fontSize:14, fontWeight:800, cursor:"pointer" }}>
+              Reload App
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppInner() {
   const [screen, setScreen] = useState("login");
   const [currentUser, setCurrentUser] = useState(null);  // {username, displayName}
   const [subject, setSubject] = useState(null);  // active SUBJECTS entry
@@ -5368,6 +5399,20 @@ ${SCHEMA_INSTRUCTIONS}`;
           </div>
         )}
 
+        {screen === "problem" && !prob && (
+          <div style={{ ...S.card, textAlign:"center" }}>
+            <div style={{ fontSize:32, marginBottom:12 }}>⚠️</div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#1E3A5F", marginBottom:8 }}>Session ended early</div>
+            <div style={{ fontSize:13, color:"#9A9490", marginBottom:20, lineHeight:1.7 }}>
+              The question couldn't load. Your progress has been saved.
+            </div>
+            <div style={S.btnRow}>
+              <button style={S.primaryBtn(false)} onClick={() => { clearTimer(); setScreen("complete"); }}>See Results</button>
+              <button className="ghost-hover" style={{ ...S.primaryBtn(false), background:"transparent", border:"1.5px solid #E2DDD8", color:"#9A9490" }} onClick={() => { clearTimer(); setScreen("subjects"); }}>Home</button>
+            </div>
+          </div>
+        )}
+
         {screen === "problem" && prob && (
           <div style={{ ...S.card, position:"relative" }}>
             {/* ── Adaptive difficulty toast ── */}
@@ -5734,5 +5779,13 @@ ${SCHEMA_INSTRUCTIONS}`;
         )}
       </div>
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }
